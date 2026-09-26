@@ -1,0 +1,1 @@
+"""Shared Inbox backend application package."""

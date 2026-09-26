@@ -1,0 +1,60 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-inbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inbox}
+      POSTGRES_DB: ${POSTGRES_DB:-shared_inbox}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inbox} -d ${POSTGRES_DB:-shared_inbox}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DEBUG: ${DEBUG:-true}
+      SECRET_KEY: ${SECRET_KEY:-change-me-generate-a-long-random-string}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-inbox}:${POSTGRES_PASSWORD:-inbox}@db:5432/${POSTGRES_DB:-shared_inbox}
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      UPLOAD_DIR: uploads
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      VIBER_AUTH_TOKEN: ${VIBER_AUTH_TOKEN:-}
+      VIBER_API_BASE_URL: ${VIBER_API_BASE_URL:-https://chatapi.viber.com/pa}
+      VIBER_WEBHOOK_URL: ${VIBER_WEBHOOK_URL:-}
+      VIBER_SENDER_NAME: ${VIBER_SENDER_NAME:-Support Bot}
+      VIBER_AUTO_REPLY: ${VIBER_AUTO_REPLY:-Hi! An agent will reply shortly.}
+      DB_HOST: db
+      DB_PORT: 5432
+    volumes:
+      - uploads:/code/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8000/api/v1/ws}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Shared Inbox}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:
