@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     viber_sender_name: str = "Support Bot"
     viber_auto_reply: str = ""
 
+    # Telegram
+    telegram_bot_token: str = ""
+    telegram_api_base_url: str = "https://api.telegram.org"
+    telegram_webhook_url: str = ""
+    # Sent back by Telegram as `X-Telegram-Bot-Api-Secret-Token` on every webhook
+    # call so we can verify requests actually come from Telegram.
+    telegram_webhook_secret: str = ""
+    telegram_auto_reply: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

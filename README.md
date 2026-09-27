@@ -1,11 +1,15 @@
-# Shared Inbox — Multi-Agent Viber Customer Support Dashboard
+# Shared Inbox — Multi-Agent Omni-Channel Customer Support Dashboard
 
 A production-ready skeleton for a shared inbox that lets support agents handle
-Viber conversations in real time.
+conversations from multiple messaging channels, in one dashboard, in real time.
 
 - **Backend**: FastAPI, Async WebSockets, Pydantic v2, SQLAlchemy 2 (async), PostgreSQL, JWT auth + RBAC
 - **Frontend**: Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS, Zustand, WebSockets, Lucide icons
-- **Messaging**: Viber Bot API (webhook ingest + REST messaging client, signature verification)
+- **Messaging**: channel-agnostic `ChannelClient` interface (`backend/app/services/channels/`)
+  with two channels wired up today — **Viber** (webhook ingest + REST client, HMAC signature
+  verification) and **Telegram** (Bot API webhook + client, secret-token verification).
+  Adding a new channel means one client implementation + one webhook endpoint; the
+  conversation/message model, dashboard, and WebSocket feed are shared across all channels.
 
 ## Project structure
 
@@ -29,13 +33,19 @@ shared-inbox/
 │   │   │       ├── auth.py            # POST /auth/login, GET /auth/me
 │   │   │       ├── users.py           # GET /users/agents, POST /users (admin)
 │   │   │       ├── conversations.py   # list/get/patch conversations
-│   │   │       ├── messages.py        # agent replies (relayed to Viber)
+│   │   │       ├── messages.py        # agent replies (relayed via the contact's channel)
 │   │   │       ├── notes.py           # internal agent notes
-│   │   │       ├── viber.py           # POST /viber/webhook (signature-verified)
-│   │   │       └── diagnostics.py     # admin: Viber account info / set_webhook
+│   │   │       ├── viber.py           # POST /viber/webhook (HMAC signature-verified)
+│   │   │       ├── telegram.py        # POST /telegram/webhook (secret-token-verified)
+│   │   │       └── diagnostics.py     # admin: per-channel account info / set_webhook
 │   │   └── services/
 │   │       ├── ws_manager.py          # WebSocket manager + broadcast
-│   │       ├── viber_client.py        # Viber REST client + HMAC verification
+│   │       ├── inbound.py             # shared find-or-create conversation + persist + broadcast
+│   │       ├── channels/
+│   │       │   ├── base.py            # ChannelClient interface + ChannelSendResult
+│   │       │   ├── viber.py           # Viber REST client + HMAC verification
+│   │       │   ├── telegram.py        # Telegram Bot API client
+│   │       │   └── registry.py        # channel name -> client lookup
 │   │       └── serializers.py         # ORM -> JSON dicts (no lazy-load issues)
 │   ├── init_db.py                     # create tables + seed admin/agent
 │   ├── smoke_test.py                  # automated smoke test (mock Viber)
@@ -167,6 +177,50 @@ Open http://localhost:3000 and sign in.
 Every inbound Viber message now creates/updates a conversation and is pushed
 live to all connected agent dashboards over WebSocket.
 
+## 4. Telegram integration
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) and copy its **token** into
+   `backend/.env` → `TELEGRAM_BOT_TOKEN`. Generate a random string for
+   `TELEGRAM_WEBHOOK_SECRET` (Telegram echoes it back on every webhook call so the
+   backend can verify requests actually come from Telegram).
+2. The webhook URL must be publicly reachable. Use ngrok/tunnel:
+   ```bash
+   ngrok http 8000
+   ```
+3. Point Telegram at your backend (admin login required):
+   ```bash
+   curl -s -X POST http://localhost:8000/api/v1/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"admin@example.com","password":"admin123"}'
+
+   curl -X POST http://localhost:8000/api/v1/diagnostics/telegram/set-webhook \
+     -H "Authorization: Bearer <access_token>" \
+     -H "Content-Type: application/json" \
+     -d '{"url":"https://your-ngrok-host/api/v1/telegram/webhook"}'
+   ```
+4. Verify connectivity:
+   ```bash
+   curl http://localhost:8000/api/v1/diagnostics/telegram/account \
+     -H "Authorization: Bearer <access_token>"
+   ```
+
+Every inbound Telegram message now creates/updates a conversation (kept separate
+from Viber conversations by `channel`) and is pushed live to all connected agent
+dashboards over WebSocket, exactly like Viber.
+
+### Adding another channel
+
+1. Add a value to `ChannelType` in `backend/app/models/conversation.py`.
+2. Implement `ChannelClient` (`backend/app/services/channels/base.py`) for the
+   new provider — see `viber.py` / `telegram.py` for the shape.
+3. Register it in `backend/app/services/channels/registry.py`.
+4. Add a webhook endpoint that verifies the request and calls
+   `handle_inbound_message` / `handle_delivery_update` from `services/inbound.py`.
+5. Wire the router in `api/v1/router.py` and add settings in `core/config.py`.
+
+`messages.py` (agent replies + attachments) and the dashboard already work with
+any channel through `get_channel_client(conversation.channel)` — no changes needed there.
+
 ## WebSocket events (server -> client)
 
 | Event                  | Payload                                            |
@@ -208,3 +262,9 @@ conversation, status filters, internal note, agent text reply, attachment upload
   a backend-driven list when you need per-team management.
 - RBAC: endpoints use `require_roles(UserRole.admin)` for admin-only actions
   (create user, diagnostics). Agents can manage all conversations.
+- `smoke_test.py` currently only exercises the Viber path; the Telegram webhook
+  is best verified against the real Bot API (or a `getMe`/`sendMessage` mock)
+  since it isn't HMAC-signed the way Viber's is.
+- A conversation belongs to exactly one channel; a contact who reaches out on
+  two channels shows up as two separate conversations. Merge-by-identity across
+  channels is a reasonable next step if you need it.

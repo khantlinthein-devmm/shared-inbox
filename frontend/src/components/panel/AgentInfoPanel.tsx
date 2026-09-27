@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Send, StickyNote, UserRound } from "lucide-react";
 import { createNote, listAgents, listNotes, updateConversation } from "@/lib/api";
-import { statusLabel } from "@/lib/format";
+import { channelLabel, statusLabel } from "@/lib/format";
 import { useChatStore } from "@/stores/chatStore";
 import type { ConversationStatus } from "@/lib/types";
 
@@ -73,7 +73,11 @@ export function AgentInfoPanel() {
             <dd className="font-medium">{conversation.contact_name}</dd>
           </div>
           <div>
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">Viber ID</dt>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">Channel</dt>
+            <dd className="font-medium">{channelLabel(conversation.channel)}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-zinc-400">Contact ID</dt>
             <dd className="truncate font-mono text-xs text-zinc-600 dark:text-zinc-300">
               {conversation.contact_user_id}
             </dd>

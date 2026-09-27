@@ -75,8 +75,8 @@ async def main() -> None:
     args = parser.parse_args()
     base = args.url.rstrip("/")
 
-    # Unique identifiers so repeated runs never collide (contact_user_id and
-    # viber_message_token are unique columns).
+    # Unique identifiers so repeated runs never collide (contact_user_id +
+    # channel and channel_message_id are unique).
     contact_id = f"smoke-{uuid.uuid4()}"
     print(f"Target: {base}")
     print(f"Contact: {contact_id}\n")

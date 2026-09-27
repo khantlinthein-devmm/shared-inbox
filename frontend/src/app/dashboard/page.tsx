@@ -125,7 +125,7 @@ function EmptyCenter() {
         <p className="mt-4 text-sm font-medium text-zinc-600 dark:text-zinc-300">
           Select a conversation to start replying
         </p>
-        <p className="mt-1 text-xs">New Viber messages appear here in real time</p>
+        <p className="mt-1 text-xs">New messages from any connected channel appear here in real time</p>
       </div>
     </div>
   );

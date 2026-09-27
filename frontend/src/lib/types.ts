@@ -1,5 +1,7 @@
 export type Role = "admin" | "agent";
 
+export type Channel = "viber" | "telegram";
+
 export type ConversationStatus = "unassigned" | "open" | "pending" | "closed";
 
 export type MessageSender = "contact" | "agent";
@@ -24,6 +26,7 @@ export interface Agent {
 
 export interface Conversation {
   id: number;
+  channel: Channel;
   contact_user_id: string;
   contact_name: string;
   contact_avatar: string | null;

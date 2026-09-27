@@ -5,17 +5,20 @@ import os
 import httpx
 
 from app.core.config import get_settings
+from app.services.channels.base import ChannelAPIError, ChannelSendResult
 
 # Overridable so tests / smoke runs can point at a mock Viber API.
 VIBER_API_BASE_URL = os.getenv("VIBER_API_BASE_URL", "https://chatapi.viber.com/pa")
 
 
-class ViberAPIError(RuntimeError):
+class ViberAPIError(ChannelAPIError):
     """Raised when the Viber Public Account API returns a non-zero status."""
 
 
 class ViberClient:
     """Thin async wrapper around the Viber Public Account REST API."""
+
+    channel = "viber"
 
     def __init__(self, auth_token: str, base_url: str = VIBER_API_BASE_URL) -> None:
         self.auth_token = auth_token
@@ -37,17 +40,43 @@ class ViberClient:
             raise ViberAPIError(f"Viber API error (HTTP {response.status_code}): {data}")
         return data
 
-    async def set_webhook(self, url: str, events: list[str]) -> dict:
-        return await self._post("/set_webhook", {"url": url, "event_types": events, "send_name": True})
+    async def set_webhook(self, url: str, events: list[str] | None = None) -> dict:
+        settings = get_settings()
+        return await self._post(
+            "/set_webhook",
+            {"url": url, "event_types": events or settings.viber_webhook_events, "send_name": True},
+        )
 
     async def remove_webhook(self) -> dict:
         return await self._post("/set_webhook", {"url": ""})
 
-    async def send_text(self, receiver: str, text: str) -> dict:
-        return await self._post("/send_message", {"receiver": receiver, "type": "text", "text": text})
+    async def send_text(self, receiver: str, text: str) -> ChannelSendResult:
+        data = await self._post("/send_message", {"receiver": receiver, "type": "text", "text": text})
+        token = data.get("message_token")
+        return ChannelSendResult(message_id=str(token) if token else None, raw=data)
 
     async def send_message(self, payload: dict) -> dict:
         return await self._post("/send_message", payload)
+
+    async def send_file(
+        self,
+        receiver: str,
+        media_url: str,
+        file_name: str,
+        size: int,
+        content_type: str | None = None,
+    ) -> ChannelSendResult:
+        data = await self.send_message(
+            {
+                "receiver": receiver,
+                "type": "file",
+                "media": media_url,
+                "size": size,
+                "file_name": file_name,
+            }
+        )
+        token = data.get("message_token")
+        return ChannelSendResult(message_id=str(token) if token else None, raw=data)
 
     async def get_account_info(self) -> dict:
         return await self._post("/get_account_info", {})

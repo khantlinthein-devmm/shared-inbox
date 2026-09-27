@@ -22,11 +22,12 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 @router.get("", response_model=list[ConversationOut])
 async def list_conversations(
     status: ConversationStatus | None = None,
+    channel: str | None = None,
     search: str | None = None,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[dict]:
-    """List conversations, optionally filtered by status and/or contact name."""
+    """List conversations, optionally filtered by status, channel, and/or contact name."""
     stmt = (
         select(Conversation)
         .options(
@@ -37,6 +38,8 @@ async def list_conversations(
     )
     if status is not None:
         stmt = stmt.where(Conversation.status == status.value)
+    if channel:
+        stmt = stmt.where(Conversation.channel == channel)
     if search and search.strip():
         stmt = stmt.where(Conversation.contact_name.ilike(f"%{search.strip()}%"))
 

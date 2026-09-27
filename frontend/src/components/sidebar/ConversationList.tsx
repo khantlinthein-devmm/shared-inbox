@@ -3,7 +3,7 @@
 import { Inbox, Search } from "lucide-react";
 import { useConversations } from "@/hooks/useConversations";
 import { useMounted } from "@/hooks/useMounted";
-import { formatRelative, statusDotClass, statusLabel } from "@/lib/format";
+import { channelBadgeClass, channelLabel, formatRelative, statusDotClass, statusLabel } from "@/lib/format";
 import { useChatStore } from "@/stores/chatStore";
 import { ContactAvatar } from "@/components/ContactAvatar";
 import { StatusFilter } from "./StatusFilter";
@@ -75,6 +75,13 @@ export function ConversationList() {
                   </span>
 
                   <span className="mt-1 flex items-center gap-1.5">
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${channelBadgeClass(
+                        conversation.channel
+                      )}`}
+                    >
+                      {channelLabel(conversation.channel)}
+                    </span>
                     <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotClass(conversation.status)}`} />
                     <span className="text-[11px] font-medium text-zinc-400">
                       {statusLabel(conversation.status)}

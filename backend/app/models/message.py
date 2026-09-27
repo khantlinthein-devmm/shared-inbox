@@ -29,7 +29,9 @@ class Message(Base):
     )
     sender: Mapped[str] = mapped_column(String(20), default=MessageSender.contact.value)
     sender_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    viber_message_token: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
+    # Provider-native message id (Viber message_token, Telegram message_id, ...),
+    # used to correlate delivery/seen status updates back to this row.
+    channel_message_id: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
     message_type: Mapped[str] = mapped_column(String(32), default="text")
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     media_url: Mapped[str | None] = mapped_column(Text, nullable=True)
