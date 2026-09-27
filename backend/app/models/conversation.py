@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -14,12 +14,22 @@ class ConversationStatus(str, Enum):
     closed = "closed"
 
 
+class ChannelType(str, Enum):
+    """Messaging channels a conversation can come from."""
+
+    viber = "viber"
+    telegram = "telegram"
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
+    __table_args__ = (UniqueConstraint("channel", "contact_user_id", name="uq_conversation_channel_contact"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    contact_user_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    contact_name: Mapped[str] = mapped_column(String(255), default="Viber User")
+    channel: Mapped[str] = mapped_column(String(20), default=ChannelType.viber.value, index=True)
+    # Contact's channel-native identifier (Viber user id, Telegram chat id, ...).
+    contact_user_id: Mapped[str] = mapped_column(String(64), index=True)
+    contact_name: Mapped[str] = mapped_column(String(255), default="Contact")
     contact_avatar: Mapped[str | None] = mapped_column(String(512), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=ConversationStatus.unassigned.value, index=True)
     assigned_to_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -33,4 +43,4 @@ class Conversation(Base):
     notes: Mapped[list["AgentNote"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
-        return f"<Conversation id={self.id} contact={self.contact_user_id!r}>"
+        return f"<Conversation id={self.id} channel={self.channel!r} contact={self.contact_user_id!r}>"

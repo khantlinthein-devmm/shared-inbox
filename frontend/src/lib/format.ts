@@ -1,4 +1,4 @@
-import type { ConversationStatus, MessageStatus } from "./types";
+import type { Channel, ConversationStatus, MessageStatus } from "./types";
 
 export function formatTime(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -35,6 +35,22 @@ export function statusDotClass(status: ConversationStatus | string): string {
     closed: "bg-zinc-300 dark:bg-zinc-600",
   };
   return map[status] ?? "bg-zinc-400";
+}
+
+export function channelLabel(channel: Channel | string): string {
+  const map: Record<string, string> = {
+    viber: "Viber",
+    telegram: "Telegram",
+  };
+  return map[channel] ?? channel;
+}
+
+export function channelBadgeClass(channel: Channel | string): string {
+  const map: Record<string, string> = {
+    viber: "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
+    telegram: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+  };
+  return map[channel] ?? "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300";
 }
 
 export function messageStatusName(status: MessageStatus): string {

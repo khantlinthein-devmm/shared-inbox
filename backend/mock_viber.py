@@ -2,7 +2,7 @@
 
 Runs a tiny HTTP server (default port 9000) that answers any `/pa` POST with a
 success envelope. It returns a unique `message_token` per call because the real
-API requires unique tokens and the `messages.viber_message_token` column is
+API requires unique tokens and the `messages.channel_message_id` column is
 unique.
 
 Usage:

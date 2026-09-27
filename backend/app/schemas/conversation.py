@@ -7,6 +7,7 @@ from app.models import ConversationStatus
 
 class ConversationOut(BaseModel):
     id: int
+    channel: str
     contact_user_id: str
     contact_name: str
     contact_avatar: str | None = None

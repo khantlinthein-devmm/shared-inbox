@@ -33,6 +33,10 @@ services:
       VIBER_WEBHOOK_URL: ${VIBER_WEBHOOK_URL:-}
       VIBER_SENDER_NAME: ${VIBER_SENDER_NAME:-Support Bot}
       VIBER_AUTO_REPLY: ${VIBER_AUTO_REPLY:-Hi! An agent will reply shortly.}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      TELEGRAM_AUTO_REPLY: ${TELEGRAM_AUTO_REPLY:-Hi! An agent will reply shortly.}
       DB_HOST: db
       DB_PORT: 5432
     volumes:

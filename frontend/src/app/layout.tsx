@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "Shared Inbox",
-  description: "Multi-agent Viber customer support dashboard",
+  description: "Multi-agent, multi-channel customer support dashboard",
 };
 
 // Sets the initial theme class before first paint to avoid a light/dark flash.

@@ -16,6 +16,7 @@ def conversation_to_dict(conversation: Conversation) -> dict:
     assigned = conversation.assigned_to
     return {
         "id": conversation.id,
+        "channel": conversation.channel,
         "contact_user_id": conversation.contact_user_id,
         "contact_name": conversation.contact_name,
         "contact_avatar": conversation.contact_avatar,
