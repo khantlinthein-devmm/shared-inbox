@@ -8,6 +8,7 @@ import type {
   ConversationStatus,
   LoginResponse,
   Message,
+  QuickReply,
   User,
 } from "./types";
 
@@ -62,6 +63,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     }
     throw new Error(detail);
   }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -149,4 +151,29 @@ export function updateUser(id: number, patch: Record<string, unknown>): Promise<
     method: "PATCH",
     body: JSON.stringify(patch),
   });
+}
+
+export function listQuickReplies(): Promise<QuickReply[]> {
+  return request<QuickReply[]>(`/api/v1/quick-replies`);
+}
+
+export function createQuickReply(payload: { title: string; content: string }): Promise<QuickReply> {
+  return request<QuickReply>(`/api/v1/quick-replies`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateQuickReply(
+  id: number,
+  patch: { title?: string; content?: string }
+): Promise<QuickReply> {
+  return request<QuickReply>(`/api/v1/quick-replies/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteQuickReply(id: number): Promise<void> {
+  return request<void>(`/api/v1/quick-replies/${id}`, { method: "DELETE" });
 }

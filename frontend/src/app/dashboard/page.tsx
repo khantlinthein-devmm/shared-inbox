@@ -7,6 +7,7 @@ import { LogOut, MessagesSquare, User as UserIcon, Wifi, WifiOff } from "lucide-
 import { AgentInfoPanel } from "@/components/panel/AgentInfoPanel";
 import { ConversationList } from "@/components/sidebar/ConversationList";
 import { ConversationThread } from "@/components/conversation/ConversationThread";
+import { NotificationToggle } from "@/components/NotificationToggle";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useMounted } from "@/hooks/useMounted";
@@ -77,14 +78,23 @@ export default function DashboardPage() {
           </span>
 
           {user.role === "admin" && (
-            <Link
-              href="/admin/users"
-              className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
-            >
-              Team
-            </Link>
+            <>
+              <Link
+                href="/admin/users"
+                className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
+              >
+                Team
+              </Link>
+              <Link
+                href="/admin/quick-replies"
+                className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-600 transition hover:border-brand-300 hover:text-brand-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-brand-500 dark:hover:text-brand-300"
+              >
+                Quick Replies
+              </Link>
+            </>
           )}
 
+          <NotificationToggle />
           <ThemeToggle />
 
           <button

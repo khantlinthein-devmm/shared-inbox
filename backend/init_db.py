@@ -9,6 +9,7 @@ No users are seeded. Create the first admin account with:
 
 import asyncio
 
+import app.models  # noqa: F401  registers every model on Base.metadata
 from app.core.database import Base, engine
 
 

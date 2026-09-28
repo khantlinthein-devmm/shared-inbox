@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getToken } from "@/lib/api";
+import { installAlertListeners, notifyForEvent } from "@/lib/notify";
 import { buildWsUrl } from "@/lib/ws";
 import { useChatStore } from "@/stores/chatStore";
 
@@ -38,7 +39,9 @@ export function useWebSocket(enabled: boolean): WsStatus {
 
       ws.onmessage = (evt) => {
         try {
-          useChatStore.getState().applyEvent(JSON.parse(evt.data));
+          const event = JSON.parse(evt.data);
+          useChatStore.getState().applyEvent(event);
+          notifyForEvent(event);
         } catch {
           /* ignore malformed frames */
         }
@@ -56,6 +59,7 @@ export function useWebSocket(enabled: boolean): WsStatus {
     };
 
     connect();
+    const removeAlertListeners = installAlertListeners();
 
     const ping = setInterval(() => {
       if (ws?.readyState === WebSocket.OPEN) {
@@ -65,6 +69,7 @@ export function useWebSocket(enabled: boolean): WsStatus {
 
     return () => {
       disposed = true;
+      removeAlertListeners();
       clearInterval(ping);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       ws?.close();

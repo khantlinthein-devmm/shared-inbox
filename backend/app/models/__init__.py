@@ -2,6 +2,7 @@ from app.models.user import User, UserRole
 from app.models.conversation import ChannelType, Conversation, ConversationStatus
 from app.models.message import Message, MessageSender, MessageStatus
 from app.models.note import AgentNote
+from app.models.quick_reply import QuickReply
 
 __all__ = [
     "User",
@@ -13,4 +14,5 @@ __all__ = [
     "MessageSender",
     "MessageStatus",
     "AgentNote",
+    "QuickReply",
 ]

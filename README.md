@@ -35,6 +35,7 @@ shared-inbox/
 │   │   │       ├── conversations.py   # list/get/patch conversations
 │   │   │       ├── messages.py        # agent replies (relayed via the contact's channel)
 │   │   │       ├── notes.py           # internal agent notes
+│   │   │       ├── quick_replies.py   # canned responses (list: all, write: admin)
 │   │   │       ├── viber.py           # POST /viber/webhook (HMAC signature-verified)
 │   │   │       ├── telegram.py        # POST /telegram/webhook (secret-token-verified)
 │   │   │       └── diagnostics.py     # admin: per-channel account info / set_webhook
@@ -229,6 +230,19 @@ any channel through `get_channel_client(conversation.channel)` — no changes ne
 | `conversation:updated` | full conversation object (assignment / status)      |
 | `message:status`       | `{ message_id, conversation_id, status }` (delivered/seen) |
 
+## Quick replies & alerts
+
+- **Quick replies** live in the `quick_replies` table. Admins manage them at
+  `/admin/quick-replies` (or `GET/POST /api/v1/quick-replies`,
+  `PATCH/DELETE /api/v1/quick-replies/{id}`); every agent sees them under the
+  composer's *Quick Replies* button. Picking one inserts its text into the reply
+  box so it can be edited before sending.
+- **New-message alerts**: when a contact writes, the dashboard plays a short chime,
+  and — if the tab is in the background — shows a desktop notification (click it to
+  jump to the conversation) and an unread count in the tab title. Nothing fires for
+  the conversation you're currently looking at. The bell icon in the header turns
+  alerts on/off (saved per browser) and asks for desktop-notification permission.
+
 ## Smoke test (no real Viber token needed)
 
 Uses a local mock Viber API so every flow can be exercised offline.
@@ -258,8 +272,6 @@ conversation, status filters, internal note, agent text reply, attachment upload
 
 ## Notes / next steps
 
-- Quick Replies are a static list in `frontend/src/lib/quickReplies.ts` — move to
-  a backend-driven list when you need per-team management.
 - RBAC: endpoints use `require_roles(UserRole.admin)` for admin-only actions
   (create user, diagnostics). Agents can manage all conversations.
 - `smoke_test.py` currently only exercises the Viber path; the Telegram webhook

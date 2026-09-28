@@ -13,6 +13,7 @@ export function MessageComposer({ conversation }: { conversation: Conversation }
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const statusFilter = useChatStore((s) => s.statusFilter);
   const setConversations = useChatStore((s) => s.setConversations);
 
@@ -21,8 +22,14 @@ export function MessageComposer({ conversation }: { conversation: Conversation }
     setConversations(updated);
   }
 
-  async function send(payload?: string) {
-    const value = (payload ?? text).trim();
+  function insertQuickReply(content: string) {
+    setText((current) => (current.trim() ? `${current.trimEnd()} ${content}` : content));
+    setShowQuick(false);
+    textareaRef.current?.focus();
+  }
+
+  async function send() {
+    const value = text.trim();
     if (!value || sending) return;
     setSending(true);
     try {
@@ -87,6 +94,7 @@ export function MessageComposer({ conversation }: { conversation: Conversation }
         {uploading && <span className="text-xs text-zinc-400">Uploading…</span>}
 
         <textarea
+          ref={textareaRef}
           rows={1}
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -110,7 +118,7 @@ export function MessageComposer({ conversation }: { conversation: Conversation }
         </button>
       </div>
 
-      {showQuick && <QuickReplyPicker onPick={(quick) => void send(quick)} />}
+      {showQuick && <QuickReplyPicker onPick={insertQuickReply} />}
     </div>
   );
 }
