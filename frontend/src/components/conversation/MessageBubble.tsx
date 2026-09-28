@@ -13,13 +13,33 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   received: null,
 };
 
+const IMAGE_TYPES = new Set(["image", "picture", "photo"]);
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i;
+const VIDEO_EXT = /\.(mp4|webm|mov)$/i;
 
 function Attachment({ message }: { message: Message }) {
   const media = message.media_url;
   if (!media) return null;
+  const type = message.message_type;
 
-  if (IMAGE_EXT.test(media)) {
+  if (type === "voice" || type === "audio") {
+    return <audio controls preload="metadata" src={media} className="mt-1 w-64 max-w-full" />;
+  }
+
+  if (type === "sticker") {
+    return VIDEO_EXT.test(media) ? (
+      <video src={media} autoPlay loop muted playsInline className="h-32 w-32 object-contain" />
+    ) : (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={media} alt="sticker" className="h-32 w-32 object-contain" />
+    );
+  }
+
+  if (type === "video") {
+    return <video src={media} controls preload="metadata" playsInline className="max-h-72 w-full rounded-lg bg-black" />;
+  }
+
+  if (IMAGE_TYPES.has(type) || IMAGE_EXT.test(media)) {
     return (
       <a href={media} target="_blank" rel="noreferrer" className="block">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -65,7 +85,7 @@ export function MessageBubble({ message }: { message: Message }) {
           <p className="text-xs font-medium text-brand-600 dark:text-brand-300">{message.sender_name}</p>
         )}
         <Attachment message={message} />
-        {message.text && (
+        {message.text && !(message.message_type === "file" && message.media_url) && (
           <p className="mt-1 whitespace-pre-wrap break-words text-sm">{message.text}</p>
         )}
         <div

@@ -24,13 +24,25 @@ class TelegramPhotoSize(BaseModel):
     file_unique_id: str | None = None
 
 
-class TelegramDocument(BaseModel):
+class TelegramFile(BaseModel):
+    """Shared shape of document / voice / audio / video / video_note / animation."""
+
     model_config = ConfigDict(extra="ignore")
 
     file_id: str
     file_name: str | None = None
     mime_type: str | None = None
     file_size: int | None = None
+    duration: int | None = None
+
+
+class TelegramSticker(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    file_id: str
+    emoji: str | None = None
+    is_animated: bool = False
+    is_video: bool = False
 
 
 class TelegramMessage(BaseModel):
@@ -46,8 +58,14 @@ class TelegramMessage(BaseModel):
     from_user: TelegramUser | None = Field(default=None, alias="from")
     text: str | None = None
     caption: str | None = None
-    document: TelegramDocument | None = None
+    document: TelegramFile | None = None
     photo: list[TelegramPhotoSize] | None = None
+    voice: TelegramFile | None = None
+    audio: TelegramFile | None = None
+    video: TelegramFile | None = None
+    video_note: TelegramFile | None = None
+    animation: TelegramFile | None = None
+    sticker: TelegramSticker | None = None
 
 
 class TelegramUpdate(BaseModel):

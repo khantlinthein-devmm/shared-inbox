@@ -243,6 +243,33 @@ any channel through `get_channel_client(conversation.channel)` — no changes ne
   the conversation you're currently looking at. The bell icon in the header turns
   alerts on/off (saved per browser) and asks for desktop-notification permission.
 
+## Photos, video, voice & emoji
+
+Agents can send photos, videos, audio and files (paperclip), record voice messages
+(microphone button) and insert emoji (smiley button). Each attachment goes out as the
+richest type the channel accepts:
+
+| Attachment | Telegram | Viber |
+| --- | --- | --- |
+| Photo | `sendPhoto` (≤10 MB, GIFs as document) | `picture` (JPEG/PNG/GIF ≤1 MB), else file |
+| Video | `sendVideo` (MP4), else document | `video` (MP4 ≤26 MB), else file |
+| Voice recording | `sendVoice` (re-encoded to OGG/Opus with ffmpeg) | file |
+| Anything else | `sendDocument` | file |
+
+Inbound Telegram photos, videos, voice notes, audio, stickers and documents are
+downloaded by the backend and re-hosted under `/uploads` (Telegram's file links embed
+the bot token, so they are never stored or shown to browsers). Animated stickers
+show their emoji.
+
+Notes:
+- **ffmpeg** converts voice recordings; the Docker image includes it. Running the
+  backend without Docker, install ffmpeg or recordings are sent as plain files.
+- The microphone only works on `https://` or `localhost` (browser rule).
+- Telegram attachments are uploaded directly, so they work with the default
+  `PUBLIC_BASE_URL`. **Viber** fetches media from a URL, so for Viber set
+  `PUBLIC_BASE_URL` to your public address (e.g. the ngrok URL).
+- `/uploads` is served without auth; stored names include a random 128-bit id.
+
 ## Smoke test (no real Viber token needed)
 
 Uses a local mock Viber API so every flow can be exercised offline.

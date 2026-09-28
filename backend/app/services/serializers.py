@@ -10,6 +10,23 @@ from sqlalchemy.orm import selectinload
 from app.models import AgentNote, Conversation, Message
 
 
+MEDIA_LABELS = {
+    "image": "[Photo]",
+    "picture": "[Photo]",
+    "video": "[Video]",
+    "voice": "[Voice message]",
+    "audio": "[Audio]",
+    "sticker": "[Sticker]",
+    "file": "[File]",
+}
+
+
+def preview_text(message: Message) -> str | None:
+    if message.text:
+        return message.text
+    return MEDIA_LABELS.get(message.message_type)
+
+
 def conversation_to_dict(conversation: Conversation) -> dict:
     messages = sorted(conversation.messages or [], key=lambda m: m.created_at)
     last = messages[-1] if messages else None
@@ -24,7 +41,7 @@ def conversation_to_dict(conversation: Conversation) -> dict:
         "assigned_to_id": conversation.assigned_to_id,
         "assigned_to_email": assigned.email if assigned else None,
         "assigned_to_full_name": assigned.full_name if assigned else None,
-        "last_message": last.text if last else None,
+        "last_message": preview_text(last) if last else None,
         "last_message_at": last.created_at.isoformat() if last else None,
         "message_count": len(messages),
     }

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from app.services.media import OutboundMedia
+
 
 class ChannelAPIError(RuntimeError):
     """Raised when a channel provider's API rejects a request."""
@@ -26,14 +28,7 @@ class ChannelClient(Protocol):
 
     async def send_text(self, receiver: str, text: str) -> ChannelSendResult: ...
 
-    async def send_file(
-        self,
-        receiver: str,
-        media_url: str,
-        file_name: str,
-        size: int,
-        content_type: str | None = None,
-    ) -> ChannelSendResult: ...
+    async def send_media(self, receiver: str, media: OutboundMedia) -> ChannelSendResult: ...
 
     async def get_account_info(self) -> dict: ...
 

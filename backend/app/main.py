@@ -1,3 +1,4 @@
+import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,6 +12,17 @@ from app.core.config import get_settings
 from app.core.database import engine
 
 settings = get_settings()
+
+# Slim Python images ship without /etc/mime.types; without these, /uploads would
+# serve voice notes and stickers as text/plain and browsers refuse to play them.
+for _type, _ext in (
+    ("audio/ogg", ".ogg"),
+    ("audio/ogg", ".oga"),
+    ("audio/mp4", ".m4a"),
+    ("audio/webm", ".weba"),
+    ("image/webp", ".webp"),
+):
+    mimetypes.add_type(_type, _ext)
 
 
 @asynccontextmanager

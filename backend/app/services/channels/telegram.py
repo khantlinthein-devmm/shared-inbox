@@ -1,13 +1,32 @@
 import hmac
+from pathlib import PurePosixPath
 
 import httpx
 
 from app.core.config import get_settings
 from app.services.channels.base import ChannelAPIError, ChannelSendResult
+from app.services.media import OutboundMedia
+
+PHOTO_MAX = 10 * 1024 * 1024
+AUDIO_TYPES = {"audio/mpeg", "audio/mp3", "audio/mp4", "audio/m4a", "audio/x-m4a"}
 
 
 class TelegramAPIError(ChannelAPIError):
     """Raised when the Telegram Bot API returns ok: false."""
+
+
+def _method_for(media: OutboundMedia) -> tuple[str, str]:
+    """Pick the Bot API method + form field; anything Telegram would reject goes as a document."""
+    ctype = (media.content_type or "").lower()
+    if media.kind == "voice":
+        return "sendVoice", "voice"
+    if media.kind == "image" and ctype != "image/gif" and media.size <= PHOTO_MAX:
+        return "sendPhoto", "photo"
+    if media.kind == "video" and ctype == "video/mp4":
+        return "sendVideo", "video"
+    if media.kind == "audio" and ctype in AUDIO_TYPES:
+        return "sendAudio", "audio"
+    return "sendDocument", "document"
 
 
 class TelegramClient:
@@ -19,16 +38,22 @@ class TelegramClient:
         self.bot_token = bot_token
         self.base_url = base_url or get_settings().telegram_api_base_url
 
-    async def _post(self, method: str, payload: dict) -> dict:
+    def _url(self, method: str) -> str:
         if not self.bot_token:
             raise TelegramAPIError("TELEGRAM_BOT_TOKEN is not configured")
-        url = f"{self.base_url}/bot{self.bot_token}/{method}"
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(url, json=payload)
-            data = response.json()
+        return f"{self.base_url}/bot{self.bot_token}/{method}"
+
+    @staticmethod
+    def _check(response: httpx.Response) -> dict:
+        data = response.json()
         if not data.get("ok"):
             raise TelegramAPIError(f"Telegram API error (HTTP {response.status_code}): {data}")
         return data
+
+    async def _post(self, method: str, payload: dict) -> dict:
+        url = self._url(method)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            return self._check(await client.post(url, json=payload))
 
     async def set_webhook(self, url: str) -> dict:
         settings = get_settings()
@@ -39,33 +64,40 @@ class TelegramClient:
 
     async def send_text(self, receiver: str, text: str) -> ChannelSendResult:
         data = await self._post("sendMessage", {"chat_id": receiver, "text": text})
-        message_id = data.get("result", {}).get("message_id")
-        return ChannelSendResult(message_id=str(message_id) if message_id is not None else None, raw=data)
+        return self._result(data)
 
-    async def send_file(
-        self,
-        receiver: str,
-        media_url: str,
-        file_name: str,
-        size: int,
-        content_type: str | None = None,
-    ) -> ChannelSendResult:
-        # Telegram fetches the file itself when `document` is a public URL.
-        data = await self._post(
-            "sendDocument",
-            {"chat_id": receiver, "document": media_url, "caption": file_name},
-        )
-        message_id = data.get("result", {}).get("message_id")
-        return ChannelSendResult(message_id=str(message_id) if message_id is not None else None, raw=data)
+    async def send_media(self, receiver: str, media: OutboundMedia) -> ChannelSendResult:
+        # Upload the bytes directly so sending works even when PUBLIC_BASE_URL
+        # isn't reachable from the internet.
+        method, field = _method_for(media)
+        url = self._url(method)
+        with media.path.open("rb") as fh:
+            files = {field: (media.file_name, fh, media.content_type or "application/octet-stream")}
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                data = self._check(await client.post(url, data={"chat_id": receiver}, files=files))
+        return self._result(data)
 
     async def get_account_info(self) -> dict:
         return await self._post("getMe", {})
 
-    async def get_file_url(self, file_id: str) -> str:
-        """Resolve a Telegram `file_id` to a temporary, publicly-fetchable URL."""
+    async def download_file(self, file_id: str) -> tuple[bytes, str]:
+        """Fetch an inbound file's bytes. Returns (content, telegram file name).
+
+        The download URL embeds the bot token, so it must never be stored or
+        handed to browsers - callers re-host the bytes under /uploads instead.
+        """
         data = await self._post("getFile", {"file_id": file_id})
         file_path = data["result"]["file_path"]
-        return f"{self.base_url}/file/bot{self.bot_token}/{file_path}"
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(f"{self.base_url}/file/bot{self.bot_token}/{file_path}")
+        if response.status_code != 200:
+            raise TelegramAPIError(f"Telegram file download failed (HTTP {response.status_code})")
+        return response.content, PurePosixPath(file_path).name
+
+    @staticmethod
+    def _result(data: dict) -> ChannelSendResult:
+        message_id = data.get("result", {}).get("message_id")
+        return ChannelSendResult(message_id=str(message_id) if message_id is not None else None, raw=data)
 
     @staticmethod
     def verify_secret(configured_secret: str, header_value: str) -> bool:

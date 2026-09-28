@@ -90,22 +90,33 @@ export function sendMessage(conversationId: number, text: string): Promise<Messa
   });
 }
 
-export function uploadAttachment(conversationId: number, file: File): Promise<Message> {
+export async function uploadAttachment(
+  conversationId: number,
+  file: File,
+  options: { voice?: boolean } = {}
+): Promise<Message> {
   const form = new FormData();
   form.append("file", file);
+  if (options.voice) form.append("voice", "true");
   const headers = new Headers();
   const token = getToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  return fetch(`${API_URL}/api/v1/conversations/${conversationId}/attachments`, {
+  const res = await fetch(`${API_URL}/api/v1/conversations/${conversationId}/attachments`, {
     method: "POST",
     body: form,
     headers,
-  }).then((res) => {
-    if (!res.ok) {
-      throw new Error(`${res.status} ${res.statusText}`);
-    }
-    return res.json() as Promise<Message>;
   });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* ignore body parse errors */
+    }
+    throw new Error(detail);
+  }
+  return (await res.json()) as Message;
 }
 
 export function updateConversation(id: number, patch: Record<string, unknown>): Promise<Conversation> {

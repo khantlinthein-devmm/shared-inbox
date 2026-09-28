@@ -33,11 +33,15 @@ async def handle_inbound_message(
     channel_message_id: str | None = None,
     payload: dict | None = None,
     auto_reply: str | None = None,
+    received_at: datetime | None = None,
 ) -> None:
     """Persist an inbound contact message, creating its conversation if needed,
     optionally send a configured auto-reply, then broadcast to agent dashboards.
+
+    `received_at` should be taken when the webhook arrived, so a message whose
+    media took a while to download still sorts before messages sent after it.
     """
-    now = datetime.now(timezone.utc)
+    now = received_at or datetime.now(timezone.utc)
 
     async with SessionLocal() as db:
         conversation = await db.scalar(

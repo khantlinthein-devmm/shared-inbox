@@ -6,9 +6,14 @@ import httpx
 
 from app.core.config import get_settings
 from app.services.channels.base import ChannelAPIError, ChannelSendResult
+from app.services.media import OutboundMedia
 
 # Overridable so tests / smoke runs can point at a mock Viber API.
 VIBER_API_BASE_URL = os.getenv("VIBER_API_BASE_URL", "https://chatapi.viber.com/pa")
+
+VIBER_PICTURE_EXT = {".jpg", ".jpeg", ".png", ".gif"}
+VIBER_PICTURE_MAX = 1 * 1024 * 1024
+VIBER_VIDEO_MAX = 26 * 1024 * 1024
 
 
 class ViberAPIError(ChannelAPIError):
@@ -58,23 +63,17 @@ class ViberClient:
     async def send_message(self, payload: dict) -> dict:
         return await self._post("/send_message", payload)
 
-    async def send_file(
-        self,
-        receiver: str,
-        media_url: str,
-        file_name: str,
-        size: int,
-        content_type: str | None = None,
-    ) -> ChannelSendResult:
-        data = await self.send_message(
-            {
-                "receiver": receiver,
-                "type": "file",
-                "media": media_url,
-                "size": size,
-                "file_name": file_name,
-            }
-        )
+    async def send_media(self, receiver: str, media: OutboundMedia) -> ChannelSendResult:
+        # Viber fetches media from a public URL. Pictures and videos have strict
+        # format/size rules; anything outside them (including voice) goes as a file.
+        suffix = media.path.suffix.lower()
+        if media.kind == "image" and suffix in VIBER_PICTURE_EXT and media.size <= VIBER_PICTURE_MAX:
+            payload = {"type": "picture", "media": media.url, "text": ""}
+        elif media.kind == "video" and suffix == ".mp4" and media.size <= VIBER_VIDEO_MAX:
+            payload = {"type": "video", "media": media.url, "size": media.size}
+        else:
+            payload = {"type": "file", "media": media.url, "size": media.size, "file_name": media.file_name}
+        data = await self.send_message({"receiver": receiver, **payload})
         token = data.get("message_token")
         return ChannelSendResult(message_id=str(token) if token else None, raw=data)
 
