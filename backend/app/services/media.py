@@ -48,6 +48,19 @@ def save_bytes(content: bytes, file_name: str) -> tuple[Path, str]:
     return path, public_url(path)
 
 
+def _ffmpeg_path() -> str | None:
+    """System ffmpeg if installed, else the static binary bundled by imageio-ffmpeg."""
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:  # not installed, or no binary for this platform
+        return None
+
+
 def public_url(path: Path) -> str:
     return f"{get_settings().public_base_url.rstrip('/')}/uploads/{path.name}"
 
@@ -58,7 +71,7 @@ async def convert_to_ogg_opus(src: Path) -> Path | None:
     Returns None when ffmpeg is unavailable or fails, so callers can fall back
     to sending the original file as a document.
     """
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = _ffmpeg_path()
     if ffmpeg is None:
         logger.warning("ffmpeg not found; sending voice recording as a plain file")
         return None

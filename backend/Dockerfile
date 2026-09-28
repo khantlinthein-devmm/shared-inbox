@@ -5,10 +5,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /code
 
-# asyncpg needs libpq headers at build time; ffmpeg converts voice recordings
-# to OGG/Opus so Telegram shows them as voice notes.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libpq-dev ffmpeg \
+# asyncpg needs libpq headers at build time. Retries ride out flaky mirror
+# downloads. (ffmpeg for voice notes comes from the imageio-ffmpeg wheel.)
+RUN apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install -y --no-install-recommends build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./

@@ -262,8 +262,9 @@ the bot token, so they are never stored or shown to browsers). Animated stickers
 show their emoji.
 
 Notes:
-- **ffmpeg** converts voice recordings; the Docker image includes it. Running the
-  backend without Docker, install ffmpeg or recordings are sent as plain files.
+- **ffmpeg** converts voice recordings. It's bundled via the `imageio-ffmpeg` pip
+  package (a system `ffmpeg` on PATH is used instead if present); if neither
+  works, recordings are sent as plain files.
 - The microphone only works on `https://` or `localhost` (browser rule).
 - Telegram attachments are uploaded directly, so they work with the default
   `PUBLIC_BASE_URL`. **Viber** fetches media from a URL, so for Viber set
