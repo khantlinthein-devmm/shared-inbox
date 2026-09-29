@@ -48,7 +48,8 @@ shared-inbox/
 │   │       │   ├── telegram.py        # Telegram Bot API client
 │   │       │   └── registry.py        # channel name -> client lookup
 │   │       └── serializers.py         # ORM -> JSON dicts (no lazy-load issues)
-│   ├── init_db.py                     # create tables + seed admin/agent
+│   ├── init_db.py                     # apply database migrations (runs on start)
+│   ├── migrations/                    # Alembic migration scripts
 │   ├── smoke_test.py                  # automated smoke test (mock Viber)
 │   ├── mock_viber.py                  # local mock of the Viber REST API
 │   ├── requirements.txt
@@ -131,8 +132,23 @@ uvicorn app.main:app --reload --port 8000
 - No default passwords. Admins manage the team at `/admin/users`
   (or `POST /api/v1/users`, `PATCH /api/v1/users/{id}`). Disabled logins get 401/403.
 
-For production, use Alembic migrations (`alembic init`, then `alembic revision --autogenerate`)
-instead of `create_all`, and set a real `SECRET_KEY`.
+For production, set a real `SECRET_KEY`.
+
+### Database migrations
+
+The schema is managed by Alembic (`backend/migrations`). `python init_db.py` (run
+automatically on every container start) applies any pending migrations, so pulling
+new code and restarting never requires wiping the database. Databases created before
+migrations existed are detected and adopted in place, keeping their data.
+
+To change the schema, edit the models and generate a migration:
+
+```bash
+cd backend
+alembic revision --autogenerate -m "describe the change"
+```
+
+Review the generated file in `migrations/versions/`, commit it, and restart.
 
 ## 2. Frontend setup
 
@@ -229,6 +245,16 @@ any channel through `get_channel_client(conversation.channel)` — no changes ne
 | `message:new`          | `{ message, conversation }` (fresh inbound/outbound) |
 | `conversation:updated` | full conversation object (assignment / status)      |
 | `message:status`       | `{ message_id, conversation_id, status }` (delivered/seen) |
+
+### Unread, reopening and "Mine"
+
+- Each conversation counts contact messages no agent has looked at yet; the sidebar
+  shows the count as a badge. It clears for the whole team when an agent opens the
+  conversation (tab visible and focused) or replies in it.
+- A contact writing into a **closed** or **pending** conversation reopens it — as
+  *Open* if it's assigned, otherwise *Unassigned* — so it can't be missed.
+- The **Mine** filter shows only conversations assigned to you; it combines with the
+  status tabs.
 
 ### Sent / delivered / seen
 

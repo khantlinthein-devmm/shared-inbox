@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getConversationDetail } from "@/lib/api";
+import { getConversationDetail, markConversationRead } from "@/lib/api";
 import { useChatStore } from "@/stores/chatStore";
 import { statusLabel } from "@/lib/format";
 import { Message } from "@/lib/types";
@@ -14,10 +14,36 @@ export function ConversationThread() {
   const conversationId = useChatStore((s) => s.activeConversationId);
   const conversations = useChatStore((s) => s.conversations);
   const setMessages = useChatStore((s) => s.setMessages);
+  const upsertConversation = useChatStore((s) => s.upsertConversation);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [callError, setCallError] = useState("");
 
   useEffect(() => setCallError(""), [conversationId]);
+
+  // Clear the unread badge once an agent is actually looking at the conversation
+  // (open, tab visible and focused) - including when new messages arrive while open.
+  const unreadCount = conversations.find((c) => c.id === conversationId)?.unread_count ?? 0;
+  useEffect(() => {
+    if (!conversationId || unreadCount === 0) return;
+    let pending = false;
+    const markRead = () => {
+      if (pending || document.visibilityState !== "visible" || !document.hasFocus()) return;
+      pending = true;
+      markConversationRead(conversationId)
+        .then(upsertConversation)
+        .catch(() => {})
+        .finally(() => {
+          pending = false;
+        });
+    };
+    markRead();
+    window.addEventListener("focus", markRead);
+    document.addEventListener("visibilitychange", markRead);
+    return () => {
+      window.removeEventListener("focus", markRead);
+      document.removeEventListener("visibilitychange", markRead);
+    };
+  }, [conversationId, unreadCount, upsertConversation]);
 
   const conversation = useMemo(
     () => conversations.find((c) => c.id === conversationId),

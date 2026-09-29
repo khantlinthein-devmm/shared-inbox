@@ -13,6 +13,8 @@ export function ConversationList() {
     filtered,
     statusFilter,
     setStatusFilter,
+    mineOnly,
+    setMineOnly,
     searchQuery,
     setSearchQuery,
   } = useConversations();
@@ -34,18 +36,24 @@ export function ConversationList() {
             className="w-full rounded-xl border border-transparent bg-zinc-100 py-2 pl-9 pr-3 text-sm outline-none transition placeholder:text-zinc-400 focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-500/15 dark:bg-zinc-800 dark:focus:bg-zinc-900"
           />
         </div>
-        <StatusFilter value={statusFilter} onChange={setStatusFilter} />
+        <StatusFilter
+          value={statusFilter}
+          onChange={setStatusFilter}
+          mineOnly={mineOnly}
+          onMineOnlyChange={setMineOnly}
+        />
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-12 text-zinc-400">
             <Inbox className="h-8 w-8" />
-            <p className="text-sm">No conversations</p>
+            <p className="text-sm">{mineOnly ? "No conversations assigned to you" : "No conversations"}</p>
           </div>
         ) : (
           filtered.map((conversation) => {
             const active = conversation.id === activeId;
+            const unread = conversation.unread_count > 0;
             return (
               <button
                 key={conversation.id}
@@ -63,14 +71,28 @@ export function ConversationList() {
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
                     <span
-                      className={`truncate text-sm font-semibold ${
+                      className={`truncate text-sm ${unread ? "font-bold" : "font-semibold"} ${
                         active ? "text-brand-900 dark:text-brand-100" : ""
                       }`}
                     >
                       {conversation.contact_name}
                     </span>
-                    <span className="ml-2 shrink-0 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-                      {mounted ? formatRelative(conversation.last_message_at) : ""}
+                    <span className="ml-2 flex shrink-0 items-center gap-1.5">
+                      <span
+                        className={`text-[10px] font-medium uppercase tracking-wide ${
+                          unread ? "text-brand-600 dark:text-brand-300" : "text-zinc-400"
+                        }`}
+                      >
+                        {mounted ? formatRelative(conversation.last_message_at) : ""}
+                      </span>
+                      {unread && (
+                        <span
+                          className="min-w-[1.25rem] rounded-full bg-brand-600 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"
+                          aria-label={`${conversation.unread_count} unread`}
+                        >
+                          {conversation.unread_count > 99 ? "99+" : conversation.unread_count}
+                        </span>
+                      )}
                     </span>
                   </span>
 

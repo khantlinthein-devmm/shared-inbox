@@ -43,6 +43,7 @@ def conversation_to_dict(conversation: Conversation) -> dict:
         "contact_name": conversation.contact_name,
         "contact_avatar": conversation.contact_avatar,
         "status": conversation.status,
+        "unread_count": conversation.unread_count,
         "assigned_to_id": conversation.assigned_to_id,
         "assigned_to_email": assigned.email if assigned else None,
         "assigned_to_full_name": assigned.full_name if assigned else None,

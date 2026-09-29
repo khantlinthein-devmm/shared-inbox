@@ -57,6 +57,7 @@ async def handle_inbound_message(
                 contact_name=contact_name or "Contact",
                 contact_avatar=contact_avatar,
                 status=ConversationStatus.unassigned.value,
+                unread_count=1,
                 created_at=now,
                 updated_at=now,
             )
@@ -65,6 +66,14 @@ async def handle_inbound_message(
             seen_ids: list[int] = []
         else:
             conversation.updated_at = now
+            # SQL-side increment so simultaneous webhooks don't lose counts.
+            conversation.unread_count = Conversation.unread_count + 1
+            # A customer writing again reopens a closed/pending conversation so it
+            # shows up in the team's open work instead of going unnoticed.
+            if conversation.status in (ConversationStatus.closed.value, ConversationStatus.pending.value):
+                conversation.status = (
+                    ConversationStatus.open.value if conversation.assigned_to_id else ConversationStatus.unassigned.value
+                )
             # A reply means the contact has seen what the agents sent before it.
             # This is the only read signal on Telegram (bots get no read receipts)
             # and fills gaps on Viber, whose seen callbacks can be missed.

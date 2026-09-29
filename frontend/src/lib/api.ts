@@ -129,6 +129,10 @@ export function startCall(
   });
 }
 
+export function markConversationRead(id: number): Promise<Conversation> {
+  return request<Conversation>(`/api/v1/conversations/${id}/read`, { method: "POST" });
+}
+
 export function updateConversation(id: number, patch: Record<string, unknown>): Promise<Conversation> {
   return request<Conversation>(`/api/v1/conversations/${id}`, {
     method: "PATCH",

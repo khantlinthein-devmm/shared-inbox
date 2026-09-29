@@ -18,6 +18,7 @@ interface ChatState {
   messages: Record<number, Message[]>;
   notes: Record<number, AgentNote[]>;
   statusFilter: ConversationStatus | "";
+  mineOnly: boolean;
   searchQuery: string;
 
   setConversations: (conversations: Conversation[]) => void;
@@ -34,6 +35,7 @@ interface ChatState {
     status: MessageStatus
   ) => void;
   setStatusFilter: (filter: ConversationStatus | "") => void;
+  setMineOnly: (mineOnly: boolean) => void;
   setSearchQuery: (query: string) => void;
   applyEvent: (event: WsEvent) => void;
 }
@@ -45,6 +47,7 @@ export const useChatStore = create<ChatState>()((set) => ({
   messages: {},
   notes: {},
   statusFilter: "",
+  mineOnly: false,
   searchQuery: "",
 
   setConversations: (conversations) => set({ conversations }),
@@ -98,6 +101,7 @@ export const useChatStore = create<ChatState>()((set) => ({
     }),
 
   setStatusFilter: (statusFilter) => set({ statusFilter }),
+  setMineOnly: (mineOnly) => set({ mineOnly }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
 
   applyEvent: (event) => {

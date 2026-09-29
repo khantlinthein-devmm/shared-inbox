@@ -16,9 +16,10 @@ import sys
 
 from sqlalchemy import select
 
-from app.core.database import Base, SessionLocal, engine
+from app.core.database import SessionLocal
 from app.core.security import hash_password
 from app.models import User, UserRole
+from init_db import migrate
 
 
 def _resolve_password(cli_value: str | None) -> str:
@@ -38,20 +39,20 @@ def _resolve_password(cli_value: str | None) -> str:
     return password
 
 
-async def main() -> None:
+def main() -> None:
     parser = argparse.ArgumentParser(description="Create a user account (bootstrap)")
     parser.add_argument("--email", required=True, help="Login email")
     parser.add_argument("--name", default="System Admin", help="Full name")
     parser.add_argument("--role", default="admin", choices=["admin", "agent"], help="Role")
     parser.add_argument("--password", default=None, help="Password (else prompted securely)")
     args = parser.parse_args()
-
-    email = args.email.strip().lower()
     password = _resolve_password(args.password)
+    migrate()
+    asyncio.run(_create_user(args, password))
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
+async def _create_user(args: argparse.Namespace, password: str) -> None:
+    email = args.email.strip().lower()
     async with SessionLocal() as db:
         existing = await db.scalar(select(User).where(User.email == email))
         if existing is not None:
@@ -69,4 +70,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

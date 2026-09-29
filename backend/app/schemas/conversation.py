@@ -12,6 +12,7 @@ class ConversationOut(BaseModel):
     contact_name: str
     contact_avatar: str | None = None
     status: str
+    unread_count: int = 0
     assigned_to_id: int | None = None
     assigned_to_email: str | None = None
     assigned_to_full_name: str | None = None

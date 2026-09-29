@@ -31,6 +31,7 @@ export interface Conversation {
   contact_name: string;
   contact_avatar: string | null;
   status: ConversationStatus;
+  unread_count: number;
   assigned_to_id: number | null;
   assigned_to_email: string | null;
   assigned_to_full_name: string | null;

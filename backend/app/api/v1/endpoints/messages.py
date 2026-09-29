@@ -33,6 +33,7 @@ MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024  # 25 MB (Viber file limit for bots)
 
 async def _store_and_broadcast(db: AsyncSession, conversation: Conversation, message: Message) -> MessageOut:
     conversation.updated_at = datetime.now(timezone.utc)
+    conversation.unread_count = 0  # replying means the agent has read the conversation
     db.add(message)
     await db.commit()
 

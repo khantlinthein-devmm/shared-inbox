@@ -13,12 +13,28 @@ const FILTERS: Array<{ value: ConversationStatus | ""; label: string }> = [
 export function StatusFilter({
   value,
   onChange,
+  mineOnly,
+  onMineOnlyChange,
 }: {
   value: ConversationStatus | "";
   onChange: (value: ConversationStatus | "") => void;
+  mineOnly: boolean;
+  onMineOnlyChange: (mineOnly: boolean) => void;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
+      <button
+        onClick={() => onMineOnlyChange(!mineOnly)}
+        aria-pressed={mineOnly}
+        className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+          mineOnly
+            ? "border-violet-600 bg-violet-600 text-white shadow-soft"
+            : "border-violet-200 text-violet-700 hover:bg-violet-50 dark:border-violet-500/40 dark:text-violet-300 dark:hover:bg-violet-500/10"
+        }`}
+        title="Only conversations assigned to me"
+      >
+        Mine
+      </button>
       {FILTERS.map((filter) => (
         <button
           key={filter.label}

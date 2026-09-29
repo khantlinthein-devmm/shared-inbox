@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { listConversations } from "@/lib/api";
+import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 
 /**
@@ -15,6 +16,9 @@ export function useConversations() {
   const setConversations = useChatStore((s) => s.setConversations);
   const setStatusFilter = useChatStore((s) => s.setStatusFilter);
   const setSearchQuery = useChatStore((s) => s.setSearchQuery);
+  const mineOnly = useChatStore((s) => s.mineOnly);
+  const setMineOnly = useChatStore((s) => s.setMineOnly);
+  const myId = useAuthStore((s) => s.user?.id);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -41,19 +45,25 @@ export function useConversations() {
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return conversations;
     return conversations.filter(
       (c) =>
-        c.contact_name.toLowerCase().includes(query) ||
-        (c.last_message ?? "").toLowerCase().includes(query)
+        // Live WebSocket updates can move a conversation between statuses
+        // (e.g. a reply reopens a closed one), so re-apply the tab locally.
+        (statusFilter === "" || c.status === statusFilter) &&
+        (!mineOnly || c.assigned_to_id === myId) &&
+        (!query ||
+          c.contact_name.toLowerCase().includes(query) ||
+          (c.last_message ?? "").toLowerCase().includes(query))
     );
-  }, [conversations, searchQuery]);
+  }, [conversations, searchQuery, statusFilter, mineOnly, myId]);
 
   return {
     filtered,
     loading,
     statusFilter,
     setStatusFilter,
+    mineOnly,
+    setMineOnly,
     searchQuery,
     setSearchQuery,
   };

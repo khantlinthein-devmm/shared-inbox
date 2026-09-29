@@ -75,6 +75,26 @@ async def get_conversation(
     }
 
 
+@router.post("/{conversation_id}/read", response_model=ConversationOut)
+async def mark_conversation_read(
+    conversation_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> dict:
+    """Clear the unread count (an agent has opened the conversation) and tell every dashboard."""
+    conversation = await db.get(Conversation, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    changed = conversation.unread_count != 0
+    if changed:
+        conversation.unread_count = 0
+        await db.commit()
+    data = await serialize_conversation(db, conversation_id)
+    if changed:
+        await manager.broadcast_to_agents({"type": "conversation:updated", "payload": data})
+    return data
+
+
 @router.patch("/{conversation_id}", response_model=ConversationOut)
 async def update_conversation(
     conversation_id: int,
