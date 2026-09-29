@@ -271,6 +271,22 @@ Notes:
   `PUBLIC_BASE_URL` to your public address (e.g. the ngrok URL).
 - `/uploads` is served without auth; stored names include a random 128-bit id.
 
+## Voice & video calls (Jitsi Meet)
+
+Viber and Telegram bot APIs can't place or receive calls, so calls run on
+[Jitsi Meet](https://jitsi.org/) in the browser. The phone / camera buttons in the
+conversation header create a random room, send the contact the join link through
+their channel (`CALL_INVITE_TEMPLATE`), and open the call for the agent in a new tab.
+The thread shows a call card with a **Join** button to rejoin.
+
+- `JITSI_DOMAIN` defaults to the public `meet.jit.si`, which is fine for trying it
+  out; there the first person in a room must sign in (Google/GitHub) to start it.
+  For production, [self-host Jitsi](https://jitsi.github.io/handbook/docs/devops-guide/devops-guide-docker)
+  or use an 8x8 JaaS domain.
+- Room names carry 128 random bits, so only people with the link can join; there's
+  no lobby or password.
+- Customers join from the link in their phone's browser or the Jitsi Meet app.
+
 ## Smoke test (no real Viber token needed)
 
 Uses a local mock Viber API so every flow can be exercised offline.

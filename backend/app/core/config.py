@@ -3,6 +3,9 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_CALL_INVITE = "Our support team is inviting you to a {kind} call. Tap the link to join: {url}"
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment / .env file."""
 
@@ -47,6 +50,13 @@ class Settings(BaseSettings):
     # call so we can verify requests actually come from Telegram.
     telegram_webhook_secret: str = ""
     telegram_auto_reply: str = ""
+
+    # Calls (Jitsi Meet). meet.jit.si works for trying it out; use a
+    # self-hosted Jitsi or 8x8 JaaS domain in production.
+    jitsi_domain: str = "meet.jit.si"
+    # Sent to the contact; {kind} becomes "voice"/"video" and {url} the join link.
+    # Empty means DEFAULT_CALL_INVITE.
+    call_invite_template: str = ""
 
 
 @lru_cache

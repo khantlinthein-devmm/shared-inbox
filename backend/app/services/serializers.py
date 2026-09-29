@@ -18,10 +18,15 @@ MEDIA_LABELS = {
     "audio": "[Audio]",
     "sticker": "[Sticker]",
     "file": "[File]",
+    "voice_call": "[Voice call]",
+    "video_call": "[Video call]",
 }
 
 
 def preview_text(message: Message) -> str | None:
+    # Call invites carry a long link as text; the label reads better in the list.
+    if message.message_type.endswith("_call"):
+        return MEDIA_LABELS.get(message.message_type)
     if message.text:
         return message.text
     return MEDIA_LABELS.get(message.message_type)
@@ -76,6 +81,8 @@ def note_to_dict(note: AgentNote) -> dict:
 
 async def serialize_conversation(db: AsyncSession, conversation_id: int) -> dict:
     """Fetch a conversation (messages + assignee eager-loaded) and serialize it."""
+    # populate_existing: the request's session may already hold this conversation
+    # with a message list loaded before the message just added.
     conversation = await db.get(
         Conversation,
         conversation_id,
@@ -83,6 +90,7 @@ async def serialize_conversation(db: AsyncSession, conversation_id: int) -> dict
             selectinload(Conversation.messages),
             selectinload(Conversation.assigned_to),
         ],
+        populate_existing=True,
     )
     if conversation is None:
         raise ValueError(f"Conversation {conversation_id} not found")

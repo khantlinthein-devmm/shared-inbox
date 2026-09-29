@@ -1,7 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
-import { Check, CheckCheck } from "lucide-react";
+import { Check, CheckCheck, ExternalLink, Phone, Video } from "lucide-react";
 import { formatTime } from "@/lib/format";
 import { useMounted } from "@/hooks/useMounted";
 import type { Message } from "@/lib/types";
@@ -17,10 +16,38 @@ const IMAGE_TYPES = new Set(["image", "picture", "photo"]);
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i;
 const VIDEO_EXT = /\.(mp4|webm|mov)$/i;
 
+function CallCard({ message }: { message: Message }) {
+  const video = message.message_type === "video_call";
+  const Icon = video ? Video : Phone;
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20">
+        <Icon className="h-4 w-4" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-semibold">{video ? "Video call" : "Voice call"}</p>
+        <p className="text-xs opacity-80">Invite link sent</p>
+      </div>
+      {message.media_url && (
+        <a
+          href={message.media_url}
+          target="_blank"
+          rel="noreferrer"
+          className="ml-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-brand-700 transition hover:bg-brand-50"
+        >
+          Join
+        </a>
+      )}
+    </div>
+  );
+}
+
 function Attachment({ message }: { message: Message }) {
   const media = message.media_url;
   if (!media) return null;
   const type = message.message_type;
+
+  if (type === "voice_call" || type === "video_call") return <CallCard message={message} />;
 
   if (type === "voice" || type === "audio") {
     return <audio controls preload="metadata" src={media} className="mt-1 w-64 max-w-full" />;
@@ -85,7 +112,7 @@ export function MessageBubble({ message }: { message: Message }) {
           <p className="text-xs font-medium text-brand-600 dark:text-brand-300">{message.sender_name}</p>
         )}
         <Attachment message={message} />
-        {message.text && !(message.message_type === "file" && message.media_url) && (
+        {message.text && !(message.media_url && ["file", "voice_call", "video_call"].includes(message.message_type)) && (
           <p className="mt-1 whitespace-pre-wrap break-words text-sm">{message.text}</p>
         )}
         <div

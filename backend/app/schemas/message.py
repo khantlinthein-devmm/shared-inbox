@@ -24,6 +24,15 @@ class MessageCreate(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class CallCreate(BaseModel):
+    video: bool = True
+
+
+class CallOut(BaseModel):
+    join_url: str
+    message: MessageOut
+
+
 class AgentNoteCreate(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
 

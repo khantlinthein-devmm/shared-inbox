@@ -37,6 +37,8 @@ services:
       TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       TELEGRAM_AUTO_REPLY: ${TELEGRAM_AUTO_REPLY:-Hi! An agent will reply shortly.}
+      JITSI_DOMAIN: ${JITSI_DOMAIN:-meet.jit.si}
+      CALL_INVITE_TEMPLATE: ${CALL_INVITE_TEMPLATE:-}
       DB_HOST: db
       DB_PORT: 5432
     volumes:

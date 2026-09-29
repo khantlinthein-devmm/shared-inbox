@@ -119,6 +119,16 @@ export async function uploadAttachment(
   return (await res.json()) as Message;
 }
 
+export function startCall(
+  conversationId: number,
+  video: boolean
+): Promise<{ join_url: string; message: Message }> {
+  return request(`/api/v1/conversations/${conversationId}/calls`, {
+    method: "POST",
+    body: JSON.stringify({ video }),
+  });
+}
+
 export function updateConversation(id: number, patch: Record<string, unknown>): Promise<Conversation> {
   return request<Conversation>(`/api/v1/conversations/${id}`, {
     method: "PATCH",

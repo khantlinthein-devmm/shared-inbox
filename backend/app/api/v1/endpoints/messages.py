@@ -1,14 +1,18 @@
+import json
+import secrets
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import DEFAULT_CALL_INVITE, get_settings
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models import Conversation, Message, MessageSender, MessageStatus, User
-from app.schemas.message import MessageCreate, MessageOut
+from app.schemas.message import CallCreate, CallOut, MessageCreate, MessageOut
 from app.services.channels.base import ChannelAPIError
 from app.services.channels.registry import get_channel_client
 from app.services.media import (
@@ -25,6 +29,22 @@ from app.services.ws_manager import manager
 router = APIRouter(prefix="/conversations", tags=["messages"])
 
 MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024  # 25 MB (Viber file limit for bots)
+
+
+async def _store_and_broadcast(db: AsyncSession, conversation: Conversation, message: Message) -> MessageOut:
+    conversation.updated_at = datetime.now(timezone.utc)
+    db.add(message)
+    await db.commit()
+
+    out = MessageOut.model_validate(message_to_dict(message, conversation))
+    conversation_data = await serialize_conversation(db, conversation.id)
+    await manager.broadcast_to_agents(
+        {
+            "type": "message:new",
+            "payload": {"message": out.model_dump(mode="json"), "conversation": conversation_data},
+        }
+    )
+    return out
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageOut])
@@ -83,19 +103,7 @@ async def create_agent_message(
         channel_message_id=result.message_id,
         created_at=datetime.now(timezone.utc),
     )
-    conversation.updated_at = datetime.now(timezone.utc)
-    db.add(message)
-    await db.commit()
-
-    out = MessageOut.model_validate(message_to_dict(message, conversation))
-    conversation_data = await serialize_conversation(db, conversation.id)
-    await manager.broadcast_to_agents(
-        {
-            "type": "message:new",
-            "payload": {"message": out.model_dump(mode="json"), "conversation": conversation_data},
-        }
-    )
-    return out
+    return await _store_and_broadcast(db, conversation, message)
 
 
 @router.post(
@@ -179,16 +187,70 @@ async def upload_attachment(
         payload={"file_name": media.file_name, "content_type": media.content_type, "size": media.size},
         created_at=datetime.now(timezone.utc),
     )
-    conversation.updated_at = datetime.now(timezone.utc)
-    db.add(message)
-    await db.commit()
+    return await _store_and_broadcast(db, conversation, message)
 
-    out = MessageOut.model_validate(message_to_dict(message, conversation))
-    conversation_data = await serialize_conversation(db, conversation.id)
-    await manager.broadcast_to_agents(
-        {
-            "type": "message:new",
-            "payload": {"message": out.model_dump(mode="json"), "conversation": conversation_data},
-        }
+
+def _jitsi_url(room: str, *, video: bool, display_name: str | None = None) -> str:
+    # Jitsi reads per-link config from the URL fragment as JSON-encoded values.
+    params: dict = {}
+    if not video:
+        params["config.startWithVideoMuted"] = True
+        params["config.startAudioOnly"] = True
+    if display_name:
+        params["userInfo.displayName"] = display_name
+    domain = get_settings().jitsi_domain.strip().removeprefix("https://").strip("/")
+    url = f"https://{domain}/{room}"
+    if params:
+        url += "#" + "&".join(f"{k}={quote(json.dumps(v, ensure_ascii=False))}" for k, v in params.items())
+    return url
+
+
+@router.post("/{conversation_id}/calls", response_model=CallOut, status_code=status.HTTP_201_CREATED)
+async def start_call(
+    conversation_id: int,
+    payload: CallCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CallOut:
+    """Start a Jitsi voice/video call: send the contact a join link and return the agent's own link.
+
+    Bot APIs can't place native Viber/Telegram calls, so the call runs in the
+    browser (or Jitsi app) on both sides. The room name is random (128 bits),
+    so only people holding the link can find it.
+    """
+    conversation = await db.get(
+        Conversation,
+        conversation_id,
+        options=[selectinload(Conversation.messages)],
     )
-    return out
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+    room = f"SharedInbox-{secrets.token_hex(16)}"
+    kind = "video" if payload.video else "voice"
+    invite_url = _jitsi_url(room, video=payload.video)
+    template = get_settings().call_invite_template.strip() or DEFAULT_CALL_INVITE
+    text = template.replace("{kind}", kind).replace("{url}", invite_url)
+    if invite_url not in text:
+        text = f"{text} {invite_url}"
+
+    channel_client = get_channel_client(conversation.channel)
+    try:
+        result = await channel_client.send_text(conversation.contact_user_id, text)
+    except ChannelAPIError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    message = Message(
+        conversation_id=conversation.id,
+        sender=MessageSender.agent.value,
+        sender_id=user.id,
+        message_type=f"{kind}_call",
+        text=text,
+        media_url=invite_url,
+        status=MessageStatus.sent.value,
+        channel_message_id=result.message_id,
+        payload={"room": room},
+        created_at=datetime.now(timezone.utc),
+    )
+    out = await _store_and_broadcast(db, conversation, message)
+    return CallOut(join_url=_jitsi_url(room, video=payload.video, display_name=user.full_name), message=out)
