@@ -3,6 +3,9 @@
 import type {
   Agent,
   AgentNote,
+  Channel,
+  ChannelsOverview,
+  ChannelStatus,
   Conversation,
   ConversationDetail,
   ConversationStatus,
@@ -28,6 +31,11 @@ function readAuth(): StoredAuth | null {
   } catch {
     return null;
   }
+}
+
+/** Media re-hosted by the backend is stored as "/uploads/..."; point it at the API host. */
+export function resolveMediaUrl(url: string): string {
+  return url.startsWith("/") ? `${API_URL}${url}` : url;
 }
 
 export function getToken(): string | null {
@@ -175,6 +183,28 @@ export function updateUser(id: number, patch: Record<string, unknown>): Promise<
   return request<User>(`/api/v1/users/${id}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
+  });
+}
+
+export function getChannels(): Promise<ChannelsOverview> {
+  return request<ChannelsOverview>(`/api/v1/channels`);
+}
+
+export function connectChannel(channel: Channel, values: Record<string, string>): Promise<ChannelStatus> {
+  return request<ChannelStatus>(`/api/v1/channels/${channel}`, {
+    method: "PUT",
+    body: JSON.stringify(values),
+  });
+}
+
+export function disconnectChannel(channel: Channel): Promise<ChannelStatus> {
+  return request<ChannelStatus>(`/api/v1/channels/${channel}`, { method: "DELETE" });
+}
+
+export function setPublicUrl(url: string): Promise<ChannelsOverview> {
+  return request<ChannelsOverview>(`/api/v1/channels/public-url`, {
+    method: "PUT",
+    body: JSON.stringify({ url }),
   });
 }
 

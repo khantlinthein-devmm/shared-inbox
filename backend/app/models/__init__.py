@@ -3,6 +3,7 @@ from app.models.conversation import ChannelType, Conversation, ConversationStatu
 from app.models.message import Message, MessageSender, MessageStatus
 from app.models.note import AgentNote
 from app.models.quick_reply import QuickReply
+from app.models.channel_account import AppSetting, ChannelAccount
 
 __all__ = [
     "User",
@@ -15,4 +16,6 @@ __all__ = [
     "MessageStatus",
     "AgentNote",
     "QuickReply",
+    "ChannelAccount",
+    "AppSetting",
 ]

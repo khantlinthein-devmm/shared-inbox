@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     telegram_webhook_secret: str = ""
     telegram_auto_reply: str = ""
 
+    # Meta Graph API (Messenger + WhatsApp Cloud API). Base is overridable for tests.
+    graph_api_base_url: str = "https://graph.facebook.com"
+    graph_api_version: str = "v23.0"
+
     # Calls (Jitsi Meet). meet.jit.si works for trying it out; use a
     # self-hosted Jitsi or 8x8 JaaS domain in production.
     jitsi_domain: str = "meet.jit.si"

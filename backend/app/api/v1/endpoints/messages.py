@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models import Conversation, Message, MessageSender, MessageStatus, User
 from app.schemas.message import CallCreate, CallOut, MessageCreate, MessageOut
+from app.services.channel_store import get_public_url
 from app.services.channels.base import ChannelAPIError
 from app.services.channels.registry import get_channel_client
 from app.services.media import (
@@ -22,6 +23,7 @@ from app.services.media import (
     public_url,
     safe_file_name,
     save_bytes,
+    uploads_url,
 )
 from app.services.serializers import message_to_dict, serialize_conversation
 from app.services.ws_manager import manager
@@ -88,8 +90,8 @@ async def create_agent_message(
     if not text:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Message text is required")
 
-    channel_client = get_channel_client(conversation.channel)
     try:
+        channel_client = await get_channel_client(conversation.channel)
         result = await channel_client.send_text(conversation.contact_user_id, text)
     except ChannelAPIError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
@@ -143,12 +145,13 @@ async def upload_attachment(
 
     original_name = (file.filename or "attachment").strip()
     safe_name = safe_file_name(original_name)
-    path, media_url = save_bytes(content, safe_name)
+    base_url = await get_public_url()
+    path, _ = save_bytes(content, safe_name)
     message_type = "voice" if voice else detect_kind(file.content_type)
     media = OutboundMedia(
         kind=message_type,
         path=path,
-        url=media_url,
+        url=public_url(path, base_url),
         file_name=safe_name,
         content_type=file.content_type,
         size=len(content),
@@ -161,7 +164,7 @@ async def upload_attachment(
             media = OutboundMedia(
                 kind="voice",
                 path=converted,
-                url=public_url(converted),
+                url=public_url(converted, base_url),
                 file_name="voice.ogg",
                 content_type="audio/ogg",
                 size=converted.stat().st_size,
@@ -169,8 +172,8 @@ async def upload_attachment(
         else:
             media.kind = "file"
 
-    channel_client = get_channel_client(conversation.channel)
     try:
+        channel_client = await get_channel_client(conversation.channel)
         result = await channel_client.send_media(conversation.contact_user_id, media)
     except ChannelAPIError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
@@ -182,7 +185,7 @@ async def upload_attachment(
         message_type=message_type,
         # Images, videos and voice notes speak for themselves; files keep their name as a label.
         text=original_name if message_type in ("file", "audio") else None,
-        media_url=media.url,
+        media_url=uploads_url(media.path),
         status=MessageStatus.sent.value,
         channel_message_id=result.message_id,
         payload={"file_name": media.file_name, "content_type": media.content_type, "size": media.size},
@@ -235,8 +238,8 @@ async def start_call(
     if invite_url not in text:
         text = f"{text} {invite_url}"
 
-    channel_client = get_channel_client(conversation.channel)
     try:
+        channel_client = await get_channel_client(conversation.channel)
         result = await channel_client.send_text(conversation.contact_user_id, text)
     except ChannelAPIError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))

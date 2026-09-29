@@ -5,10 +5,9 @@ conversations from multiple messaging channels, in one dashboard, in real time.
 
 - **Backend**: FastAPI, Async WebSockets, Pydantic v2, SQLAlchemy 2 (async), PostgreSQL, JWT auth + RBAC
 - **Frontend**: Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS, Zustand, WebSockets, Lucide icons
-- **Messaging**: channel-agnostic `ChannelClient` interface (`backend/app/services/channels/`)
-  with two channels wired up today — **Viber** (webhook ingest + REST client, HMAC signature
-  verification) and **Telegram** (Bot API webhook + client, secret-token verification).
-  Adding a new channel means one client implementation + one webhook endpoint; the
+- **Messaging**: **Viber**, **Telegram**, **Facebook Messenger** and **WhatsApp** (Cloud API),
+  behind one channel-agnostic `ChannelClient` interface (`backend/app/services/channels/`).
+  Admins connect channels on the **Channels** page — no `.env` editing needed. The
   conversation/message model, dashboard, and WebSocket feed are shared across all channels.
 
 ## Project structure
@@ -36,17 +35,23 @@ shared-inbox/
 │   │   │       ├── messages.py        # agent replies (relayed via the contact's channel)
 │   │   │       ├── notes.py           # internal agent notes
 │   │   │       ├── quick_replies.py   # canned responses (list: all, write: admin)
+│   │   │       ├── channels.py        # admin: connect/disconnect channels, public URL
 │   │   │       ├── viber.py           # POST /viber/webhook (HMAC signature-verified)
 │   │   │       ├── telegram.py        # POST /telegram/webhook (secret-token-verified)
-│   │   │       └── diagnostics.py     # admin: per-channel account info / set_webhook
+│   │   │       ├── messenger.py       # GET/POST /messenger/webhook (Meta-signed)
+│   │   │       └── whatsapp.py        # GET/POST /whatsapp/webhook (Meta-signed)
 │   │   └── services/
 │   │       ├── ws_manager.py          # WebSocket manager + broadcast
 │   │       ├── inbound.py             # shared find-or-create conversation + persist + broadcast
+│   │       ├── channel_store.py       # channel credentials (UI, encrypted) with .env fallback
 │   │       ├── channels/
 │   │       │   ├── base.py            # ChannelClient interface + ChannelSendResult
 │   │       │   ├── viber.py           # Viber REST client + HMAC verification
 │   │       │   ├── telegram.py        # Telegram Bot API client
-│   │       │   └── registry.py        # channel name -> client lookup
+│   │       │   ├── meta.py            # shared Graph API plumbing (Messenger + WhatsApp)
+│   │       │   ├── messenger.py       # Messenger Send API client
+│   │       │   ├── whatsapp.py        # WhatsApp Cloud API client
+│   │       │   └── registry.py        # builds a client from the channel's stored config
 │   │       └── serializers.py         # ORM -> JSON dicts (no lazy-load issues)
 │   ├── init_db.py                     # apply database migrations (runs on start)
 │   ├── migrations/                    # Alembic migration scripts
@@ -164,76 +169,50 @@ npm run dev
 
 Open http://localhost:3000 and sign in.
 
-## 3. Viber integration
+## 3. Connecting channels (Channels page)
 
-1. Create a Viber Public Account / bot and copy its **Auth Token** into
-   `backend/.env` → `VIBER_AUTH_TOKEN`.
-2. The webhook URL must be publicly reachable (Viber pushes to it). Use ngrok/tunnel:
-   ```bash
-   ngrok http 8000
-   ```
-3. Point Viber at your backend (admin login required). Provide the base URL plus the webhook path:
-   ```bash
-   # Sign in to get a token first:
-   curl -s -X POST http://localhost:8000/api/v1/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"admin@example.com","password":"admin123"}'
+Sign in as an admin and open **Channels** in the header. Everything is done there;
+credentials are validated with the provider before they're saved, stored encrypted
+(key derived from `SECRET_KEY` — set a real one, and note that changing it means
+reconnecting channels), and only their last 4 characters are ever shown again.
 
-   # Use the returned access_token to register the webhook:
-   curl -X POST http://localhost:8000/api/v1/diagnostics/viber/set-webhook \
-     -H "Authorization: Bearer <access_token>" \
-     -H "Content-Type: application/json" \
-     -d '{"url":"https://your-ngrok-host/api/v1/viber/webhook"}'
-   ```
-4. Verify connectivity:
-   ```bash
-   curl http://localhost:8000/api/v1/diagnostics/viber/account \
-     -H "Authorization: Bearer <access_token>"
-   ```
+1. **Public server URL** — messaging apps must reach the backend over https. Run a
+   tunnel such as `ngrok http 8000` and paste its https address. Whenever it changes,
+   update it here: Telegram and Viber webhooks are re-registered automatically.
+2. **Telegram** — create a bot with [@BotFather](https://t.me/BotFather) (`/newbot`),
+   paste the bot token, **Connect**. The webhook and its secret are set up for you.
+3. **Viber** — create a bot at [partners.viber.com](https://partners.viber.com), paste its
+   auth token, **Connect**. The webhook is registered for you.
+4. **Messenger** — in a [Meta app](https://developers.facebook.com/apps) with the
+   Messenger product: generate a **Page access token** for your Page and copy the
+   **App secret** (App settings → Basic). Paste both, **Connect**, then in the Meta
+   dashboard (Messenger → Webhooks) paste the **Callback URL** and **Verify token**
+   shown on the card and subscribe to `messages`, `message_deliveries`, `message_reads`.
+5. **WhatsApp** — in a Meta app with the WhatsApp product: copy the **Phone number
+   ID** (WhatsApp → API Setup), create a permanent **System User access token** with
+   `whatsapp_business_messaging`, and copy the **App secret**. Paste them, **Connect**,
+   then add the card's **Callback URL** and **Verify token** under WhatsApp →
+   Configuration → Webhook and subscribe to `messages`.
 
-Every inbound Viber message now creates/updates a conversation and is pushed
-live to all connected agent dashboards over WebSocket.
+Each card also has an optional **auto-reply**. Messenger and WhatsApp only allow free-form
+replies within 24 hours of the customer's last message (Meta policy); outside that window
+the send fails with Meta's error shown in the composer.
 
-## 4. Telegram integration
-
-1. Create a bot via [@BotFather](https://t.me/BotFather) and copy its **token** into
-   `backend/.env` → `TELEGRAM_BOT_TOKEN`. Generate a random string for
-   `TELEGRAM_WEBHOOK_SECRET` (Telegram echoes it back on every webhook call so the
-   backend can verify requests actually come from Telegram).
-2. The webhook URL must be publicly reachable. Use ngrok/tunnel:
-   ```bash
-   ngrok http 8000
-   ```
-3. Point Telegram at your backend (admin login required):
-   ```bash
-   curl -s -X POST http://localhost:8000/api/v1/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"admin@example.com","password":"admin123"}'
-
-   curl -X POST http://localhost:8000/api/v1/diagnostics/telegram/set-webhook \
-     -H "Authorization: Bearer <access_token>" \
-     -H "Content-Type: application/json" \
-     -d '{"url":"https://your-ngrok-host/api/v1/telegram/webhook"}'
-   ```
-4. Verify connectivity:
-   ```bash
-   curl http://localhost:8000/api/v1/diagnostics/telegram/account \
-     -H "Authorization: Bearer <access_token>"
-   ```
-
-Every inbound Telegram message now creates/updates a conversation (kept separate
-from Viber conversations by `channel`) and is pushed live to all connected agent
-dashboards over WebSocket, exactly like Viber.
+The older `VIBER_*` / `TELEGRAM_*` settings in `.env` still work: such a channel shows as
+*Connected (.env)*. Connecting it on the page overrides `.env`; disconnecting the page's
+config falls back to `.env` again.
 
 ### Adding another channel
 
 1. Add a value to `ChannelType` in `backend/app/models/conversation.py`.
 2. Implement `ChannelClient` (`backend/app/services/channels/base.py`) for the
-   new provider — see `viber.py` / `telegram.py` for the shape.
-3. Register it in `backend/app/services/channels/registry.py`.
-4. Add a webhook endpoint that verifies the request and calls
-   `handle_inbound_message` / `handle_delivery_update` from `services/inbound.py`.
-5. Wire the router in `api/v1/router.py` and add settings in `core/config.py`.
+   provider — see `telegram.py` / `whatsapp.py` for the shape — and build it in
+   `registry.py`'s `build_client`.
+3. Add its fields to `REQUIRED` and its connect check in `api/v1/endpoints/channels.py`,
+   and a card in `frontend/src/app/admin/channels/page.tsx`.
+4. Add a webhook endpoint that reads its config with `get_config()`, verifies the
+   request, and calls `handle_inbound_message` / `handle_delivery_update` from
+   `services/inbound.py`. Wire it in `api/v1/router.py`.
 
 `messages.py` (agent replies + attachments) and the dashboard already work with
 any channel through `get_channel_client(conversation.channel)` — no changes needed there.
@@ -286,26 +265,26 @@ Agents can send photos, videos, audio and files (paperclip), record voice messag
 (microphone button) and insert emoji (smiley button). Each attachment goes out as the
 richest type the channel accepts:
 
-| Attachment | Telegram | Viber |
-| --- | --- | --- |
-| Photo | `sendPhoto` (≤10 MB, GIFs as document) | `picture` (JPEG/PNG/GIF ≤1 MB), else file |
-| Video | `sendVideo` (MP4), else document | `video` (MP4 ≤26 MB), else file |
-| Voice recording | `sendVoice` (re-encoded to OGG/Opus with ffmpeg) | file |
-| Anything else | `sendDocument` | file |
+| Attachment | Telegram | Viber | Messenger | WhatsApp |
+| --- | --- | --- | --- | --- |
+| Photo | `sendPhoto` (≤10 MB, GIFs as document) | `picture` (JPEG/PNG/GIF ≤1 MB), else file | image | image (JPEG/PNG), else document |
+| Video | `sendVideo` (MP4), else document | `video` (MP4 ≤26 MB), else file | video | video (MP4/3GP), else document |
+| Voice recording | `sendVoice` (re-encoded to OGG/Opus with ffmpeg) | file | audio | audio (shows as a voice note) |
+| Anything else | `sendDocument` | file | file | document |
 
-Inbound Telegram photos, videos, voice notes, audio, stickers and documents are
-downloaded by the backend and re-hosted under `/uploads` (Telegram's file links embed
-the bot token, so they are never stored or shown to browsers). Animated stickers
-show their emoji.
+Inbound photos, videos, voice notes, audio, stickers and documents from Telegram,
+Messenger and WhatsApp are downloaded by the backend and re-hosted under `/uploads`
+(provider links expire, and Telegram's embed the bot token, so they are never stored or
+shown to browsers). Stored links are host-relative (`/uploads/…`), so they keep working
+when the public URL changes. Animated Telegram stickers show their emoji.
 
 Notes:
 - **ffmpeg** converts voice recordings. It's bundled via the `imageio-ffmpeg` pip
   package (a system `ffmpeg` on PATH is used instead if present); if neither
   works, recordings are sent as plain files.
 - The microphone only works on `https://` or `localhost` (browser rule).
-- Telegram attachments are uploaded directly, so they work with the default
-  `PUBLIC_BASE_URL`. **Viber** fetches media from a URL, so for Viber set
-  `PUBLIC_BASE_URL` to your public address (e.g. the ngrok URL).
+- Telegram, Messenger and WhatsApp attachments are uploaded directly. **Viber** fetches
+  media from a URL, so Viber attachments need the public URL set on the Channels page.
 - `/uploads` is served without auth; stored names include a random 128-bit id.
 
 ## Voice & video calls (Jitsi Meet)
@@ -354,7 +333,7 @@ conversation, status filters, internal note, agent text reply, attachment upload
 ## Notes / next steps
 
 - RBAC: endpoints use `require_roles(UserRole.admin)` for admin-only actions
-  (create user, diagnostics). Agents can manage all conversations.
+  (create user, channel settings, quick replies). Agents can manage all conversations.
 - `smoke_test.py` currently only exercises the Viber path; the Telegram webhook
   is best verified against the real Bot API (or a `getMe`/`sendMessage` mock)
   since it isn't HMAC-signed the way Viber's is.

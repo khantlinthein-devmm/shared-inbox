@@ -38,9 +38,14 @@ class ViberClient:
     async def _post(self, path: str, payload: dict) -> dict:
         if not self.auth_token:
             raise ViberAPIError("VIBER_AUTH_TOKEN is not configured")
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(f"{self.base_url}{path}", json=payload, headers=self._headers())
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(f"{self.base_url}{path}", json=payload, headers=self._headers())
             data = response.json()
+        except httpx.HTTPError as exc:
+            raise ViberAPIError(f"Could not reach the Viber API: {exc}") from exc
+        except ValueError:
+            raise ViberAPIError(f"Unexpected Viber response (HTTP {response.status_code})") from None
         if response.status_code != 200 or data.get("status") != 0:
             raise ViberAPIError(f"Viber API error (HTTP {response.status_code}): {data}")
         return data
@@ -86,5 +91,3 @@ class ViberClient:
         expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature)
 
-
-client = ViberClient(get_settings().viber_auth_token)

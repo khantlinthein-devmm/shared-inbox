@@ -38,14 +38,14 @@ def detect_kind(content_type: str | None) -> str:
 
 
 def save_bytes(content: bytes, file_name: str) -> tuple[Path, str]:
-    """Write bytes under the upload dir with an unguessable name; return (path, public URL)."""
+    """Write bytes under the upload dir with an unguessable name; return (path, uploads_url)."""
     settings = get_settings()
     upload_dir = Path(settings.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
     stored_name = f"{uuid.uuid4().hex}-{safe_file_name(file_name)}"
     path = upload_dir / stored_name
     path.write_bytes(content)
-    return path, public_url(path)
+    return path, uploads_url(path)
 
 
 def _ffmpeg_path() -> str | None:
@@ -61,8 +61,14 @@ def _ffmpeg_path() -> str | None:
         return None
 
 
-def public_url(path: Path) -> str:
-    return f"{get_settings().public_base_url.rstrip('/')}/uploads/{path.name}"
+def uploads_url(path: Path) -> str:
+    """Host-relative link stored in the DB, so it survives the public URL changing."""
+    return f"/uploads/{path.name}"
+
+
+def public_url(path: Path, base_url: str) -> str:
+    """Absolute link for providers that fetch media themselves (Viber)."""
+    return f"{base_url.rstrip('/')}{uploads_url(path)}"
 
 
 async def convert_to_ogg_opus(src: Path) -> Path | None:

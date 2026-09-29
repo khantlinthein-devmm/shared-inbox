@@ -51,22 +51,31 @@ class TelegramClient:
 
     @staticmethod
     def _check(response: httpx.Response) -> dict:
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError:
+            raise TelegramAPIError(f"Unexpected Telegram response (HTTP {response.status_code})") from None
         if not data.get("ok"):
             raise TelegramAPIError(f"Telegram API error (HTTP {response.status_code}): {data}")
         return data
 
     async def _post(self, method: str, payload: dict) -> dict:
         url = self._url(method)
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            return self._check(await client.post(url, json=payload))
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                return self._check(await client.post(url, json=payload))
+        except httpx.HTTPError:
+            # No exception text: the request URL contains the bot token.
+            raise TelegramAPIError("Could not reach the Telegram API") from None
 
-    async def set_webhook(self, url: str) -> dict:
-        settings = get_settings()
+    async def set_webhook(self, url: str, secret: str = "") -> dict:
         payload: dict = {"url": url, "allowed_updates": ["message", "edited_message"]}
-        if settings.telegram_webhook_secret:
-            payload["secret_token"] = settings.telegram_webhook_secret
+        if secret:
+            payload["secret_token"] = secret
         return await self._post("setWebhook", payload)
+
+    async def delete_webhook(self) -> dict:
+        return await self._post("deleteWebhook", {})
 
     async def send_text(self, receiver: str, text: str) -> ChannelSendResult:
         data = await self._post("sendMessage", {"chat_id": receiver, "text": text})
@@ -79,8 +88,11 @@ class TelegramClient:
         url = self._url(method)
         with media.path.open("rb") as fh:
             files = {field: (media.file_name, fh, media.content_type or "application/octet-stream")}
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                data = self._check(await client.post(url, data={"chat_id": receiver}, files=files))
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    data = self._check(await client.post(url, data={"chat_id": receiver}, files=files))
+            except httpx.HTTPError:
+                raise TelegramAPIError("Could not reach the Telegram API") from None
         return self._result(data, receiver)
 
     async def get_account_info(self) -> dict:
@@ -94,8 +106,11 @@ class TelegramClient:
         """
         data = await self._post("getFile", {"file_id": file_id})
         file_path = data["result"]["file_path"]
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(f"{self.base_url}/file/bot{self.bot_token}/{file_path}")
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.get(f"{self.base_url}/file/bot{self.bot_token}/{file_path}")
+        except httpx.HTTPError:
+            raise TelegramAPIError("Telegram file download failed") from None
         if response.status_code != 200:
             raise TelegramAPIError(f"Telegram file download failed (HTTP {response.status_code})")
         return response.content, PurePosixPath(file_path).name
@@ -112,5 +127,3 @@ class TelegramClient:
             return False
         return hmac.compare_digest(configured_secret, header_value)
 
-
-client = TelegramClient(get_settings().telegram_bot_token)

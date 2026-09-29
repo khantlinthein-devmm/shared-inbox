@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, CheckCheck, ExternalLink, Phone, Video } from "lucide-react";
+import { resolveMediaUrl } from "@/lib/api";
 import { formatTime } from "@/lib/format";
 import { useMounted } from "@/hooks/useMounted";
 import type { Message } from "@/lib/types";
@@ -56,8 +57,8 @@ function CallCard({ message }: { message: Message }) {
 }
 
 function Attachment({ message }: { message: Message }) {
-  const media = message.media_url;
-  if (!media) return null;
+  if (!message.media_url) return null;
+  const media = resolveMediaUrl(message.media_url);
   const type = message.message_type;
 
   if (type === "voice_call" || type === "video_call") return <CallCard message={message} />;

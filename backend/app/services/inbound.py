@@ -9,6 +9,7 @@ import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import SessionLocal
 from app.models import Conversation, ConversationStatus, Message, MessageSender, MessageStatus
@@ -76,22 +77,8 @@ async def handle_inbound_message(
                 )
             # A reply means the contact has seen what the agents sent before it.
             # This is the only read signal on Telegram (bots get no read receipts)
-            # and fills gaps on Viber, whose seen callbacks can be missed.
-            seen_ids = list(
-                (
-                    await db.scalars(
-                        update(Message)
-                        .where(
-                            Message.conversation_id == conversation.id,
-                            Message.sender == MessageSender.agent.value,
-                            Message.status.in_((MessageStatus.sent.value, MessageStatus.delivered.value)),
-                            Message.created_at <= now,
-                        )
-                        .values(status=MessageStatus.seen.value)
-                        .returning(Message.id)
-                    )
-                ).all()
-            )
+            # and fills gaps on other channels, whose receipts can be missed.
+            seen_ids = await _mark_agent_messages_seen(db, conversation.id, now)
 
         inbound = Message(
             conversation_id=conversation.id,
@@ -108,7 +95,7 @@ async def handle_inbound_message(
 
         if auto_reply:
             try:
-                client = get_channel_client(channel)
+                client = await get_channel_client(channel)
                 await client.send_text(contact_user_id, auto_reply)
                 db.add(
                     Message(
@@ -151,6 +138,35 @@ async def handle_inbound_message(
     await manager.broadcast_to_agents({"type": "message:new", "payload": inbound_dict})
     for message_id in seen_ids:
         await _broadcast_status(message_id, conversation_id, MessageStatus.seen.value)
+
+
+async def _mark_agent_messages_seen(db: AsyncSession, conversation_id: int, until: datetime) -> list[int]:
+    result = await db.scalars(
+        update(Message)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.sender == MessageSender.agent.value,
+            Message.status.in_((MessageStatus.sent.value, MessageStatus.delivered.value)),
+            Message.created_at <= until,
+        )
+        .values(status=MessageStatus.seen.value)
+        .returning(Message.id)
+    )
+    return list(result.all())
+
+
+async def mark_seen_until(*, channel: str, contact_user_id: str, until: datetime) -> None:
+    """Mark agent messages sent up to `until` as seen (Messenger's read watermark)."""
+    async with SessionLocal() as db:
+        conversation = await db.scalar(
+            select(Conversation).where(Conversation.channel == channel, Conversation.contact_user_id == contact_user_id)
+        )
+        if conversation is None:
+            return
+        seen_ids = await _mark_agent_messages_seen(db, conversation.id, until)
+        await db.commit()
+    for message_id in seen_ids:
+        await _broadcast_status(message_id, conversation.id, MessageStatus.seen.value)
 
 
 _STATUS_RANK = {MessageStatus.sent.value: 0, MessageStatus.delivered.value: 1, MessageStatus.seen.value: 2}

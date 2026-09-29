@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
-from app.core.config import get_settings
 from app.schemas.telegram import TelegramMessage, TelegramUpdate
+from app.services.channel_store import ChannelConfig, get_config
 from app.services.channels.base import ChannelAPIError
-from app.services.channels.telegram import client as telegram_client, scoped_message_id
+from app.services.channels.telegram import TelegramClient, scoped_message_id
 from app.services.inbound import handle_inbound_message
 from app.services.media import save_bytes
 
@@ -25,25 +25,25 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks) 
     echoes back on every call once set via `setWebhook`.
     See https://core.telegram.org/bots/api#setwebhook
     """
-    settings = get_settings()
-    if not settings.telegram_bot_token:
-        raise HTTPException(status_code=500, detail="TELEGRAM_BOT_TOKEN is not configured")
+    config = await get_config(CHANNEL)
+    if config is None:
+        raise HTTPException(status_code=503, detail="Telegram is not connected")
 
     secret_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-    if not telegram_client.verify_secret(settings.telegram_webhook_secret, secret_header):
+    if not TelegramClient.verify_secret(config.get("webhook_secret"), secret_header):
         raise HTTPException(status_code=400, detail="Invalid Telegram webhook secret")
 
     body = await request.body()
     update = TelegramUpdate.model_validate_json(body)
-    background_tasks.add_task(_dispatch_update, update, datetime.now(timezone.utc))
+    background_tasks.add_task(_dispatch_update, update, config, datetime.now(timezone.utc))
     # Telegram just needs a fast 200 ack; real work runs in the background.
     return {"ok": True}
 
 
-async def _dispatch_update(update: TelegramUpdate, received_at: datetime) -> None:
+async def _dispatch_update(update: TelegramUpdate, config: ChannelConfig, received_at: datetime) -> None:
     try:
         if update.message is not None:
-            await _handle_message(update.message, received_at)
+            await _handle_message(update.message, config, received_at)
         # edited_message is intentionally ignored - no edit support yet
     except Exception:  # pragma: no cover - the webhook already returned 200
         logger.exception("Failed to process Telegram update: %s", update.update_id)
@@ -71,8 +71,7 @@ def _playable_name(name: str) -> str:
     return name[:-4] + ".ogg" if name.lower().endswith(".oga") else name
 
 
-async def _handle_message(message: TelegramMessage, received_at: datetime) -> None:
-    settings = get_settings()
+async def _handle_message(message: TelegramMessage, config: ChannelConfig, received_at: datetime) -> None:
     sender = message.from_user
     contact_name = "Telegram User"
     if sender is not None:
@@ -88,7 +87,7 @@ async def _handle_message(message: TelegramMessage, received_at: datetime) -> No
         if message_type in ("file", "audio"):
             text = text or name_hint
         try:
-            content, tg_name = await telegram_client.download_file(file_id)
+            content, tg_name = await TelegramClient(config.get("bot_token")).download_file(file_id)
             _, media_url = save_bytes(content, _playable_name(name_hint or tg_name))
         except ChannelAPIError:
             logger.warning("Failed to download Telegram %s for chat %s", message_type, message.chat.id)
@@ -109,6 +108,6 @@ async def _handle_message(message: TelegramMessage, received_at: datetime) -> No
         media_url=media_url,
         channel_message_id=scoped_message_id(message.chat.id, message.message_id),
         payload=message.model_dump(mode="json", exclude_none=True, by_alias=True),
-        auto_reply=settings.telegram_auto_reply or None,
+        auto_reply=config.get("auto_reply") or None,
         received_at=received_at,
     )

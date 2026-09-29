@@ -2,8 +2,8 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
-from app.core.config import get_settings
 from app.schemas.viber import ViberWebhookEvent
+from app.services.channel_store import get_config
 from app.services.channels.viber import ViberClient
 from app.services.inbound import handle_delivery_update, handle_inbound_message
 
@@ -21,25 +21,25 @@ async def viber_webhook(request: Request, background_tasks: BackgroundTasks) -> 
     Signature: `X-Viber-Content-Signature` (HMAC-SHA256 of the raw body using the
     bot auth token as the key). See https://developers.viber.com/docs/api/rest-bot-api/#callbacks
     """
-    settings = get_settings()
+    config = await get_config(CHANNEL)
     body = await request.body()
     signature = request.headers.get("X-Viber-Content-Signature", "")
 
-    if not settings.viber_auth_token:
-        raise HTTPException(status_code=500, detail="VIBER_AUTH_TOKEN is not configured")
-    if not ViberClient.verify_signature(settings.viber_auth_token, body, signature):
+    if config is None:
+        raise HTTPException(status_code=503, detail="Viber is not connected")
+    if not ViberClient.verify_signature(config.get("auth_token"), body, signature):
         raise HTTPException(status_code=400, detail="Invalid Viber signature")
 
     event = ViberWebhookEvent.model_validate_json(body)
-    background_tasks.add_task(_dispatch_event, event)
+    background_tasks.add_task(_dispatch_event, event, config.get("auto_reply"))
     # Viber expects a fast ack; real work runs in a background task.
     return {"status": 0}
 
 
-async def _dispatch_event(event: ViberWebhookEvent) -> None:
+async def _dispatch_event(event: ViberWebhookEvent, auto_reply: str) -> None:
     try:
         if event.event == "message" and event.message is not None:
-            await _handle_message(event)
+            await _handle_message(event, auto_reply)
         elif event.event in ("delivered", "seen"):
             await _handle_delivery_update(event, seen=event.event == "seen")
         # conversation_started / subscribed / unsubscribed are intentionally ignored
@@ -47,11 +47,10 @@ async def _dispatch_event(event: ViberWebhookEvent) -> None:
         logger.exception("Failed to process Viber event: %s", event.event)
 
 
-async def _handle_message(event: ViberWebhookEvent) -> None:
+async def _handle_message(event: ViberWebhookEvent, auto_reply: str) -> None:
     if event.sender is None or event.message is None:
         return
 
-    settings = get_settings()
     await handle_inbound_message(
         channel=CHANNEL,
         contact_user_id=event.sender.id,
@@ -62,7 +61,7 @@ async def _handle_message(event: ViberWebhookEvent) -> None:
         media_url=event.message.media,
         channel_message_id=str(event.message_token) if event.message_token else None,
         payload=event.message.model_dump(exclude_none=True),
-        auto_reply=settings.viber_auto_reply or None,
+        auto_reply=auto_reply or None,
     )
 
 

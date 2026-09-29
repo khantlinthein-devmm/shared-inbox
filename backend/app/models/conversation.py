@@ -19,6 +19,8 @@ class ChannelType(str, Enum):
 
     viber = "viber"
     telegram = "telegram"
+    messenger = "messenger"
+    whatsapp = "whatsapp"
 
 
 class Conversation(Base):

@@ -1,6 +1,26 @@
 export type Role = "admin" | "agent";
 
-export type Channel = "viber" | "telegram";
+export type Channel = "viber" | "telegram" | "messenger" | "whatsapp";
+
+export interface ChannelStatus {
+  channel: Channel;
+  label: string;
+  connected: boolean;
+  source: "ui" | "env" | null;
+  fields: Record<string, string>;
+  details: Record<string, string>;
+  webhook_url: string;
+  webhook_auto: boolean;
+  verify_token: string | null;
+  warnings?: string[];
+}
+
+export interface ChannelsOverview {
+  public_url: string;
+  public_url_ok: boolean;
+  channels: ChannelStatus[];
+  warnings?: Record<string, string>;
+}
 
 export type ConversationStatus = "unassigned" | "open" | "pending" | "closed";
 
