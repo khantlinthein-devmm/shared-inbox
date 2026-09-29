@@ -230,6 +230,17 @@ any channel through `get_channel_client(conversation.channel)` — no changes ne
 | `conversation:updated` | full conversation object (assignment / status)      |
 | `message:status`       | `{ message_id, conversation_id, status }` (delivered/seen) |
 
+### Sent / delivered / seen
+
+Agent messages show ✓ **Sent**, ✓✓ **Delivered** and blue ✓✓ **Seen**; the latest
+one also spells its status out.
+
+- **Viber** reports delivery and reads through its `delivered` / `seen` callbacks.
+  A late `delivered` never downgrades a message that's already seen.
+- **Telegram** gives bots no delivery or read receipts, so its messages stay *Sent*
+  until the customer replies — a reply marks every earlier agent message *Seen*
+  (on any channel). Hovering a Telegram *Sent* tick explains this.
+
 ## Quick replies & alerts
 
 - **Quick replies** live in the `quick_replies` table. Admins manage them at

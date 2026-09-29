@@ -31,6 +31,10 @@ export function ConversationThread() {
     () => [...loadedMessages].sort((a, b) => a.created_at.localeCompare(b.created_at)),
     [loadedMessages]
   );
+  const lastAgentMessageId = useMemo(
+    () => [...messages].reverse().find((m) => m.sender === "agent")?.id,
+    [messages]
+  );
 
   useEffect(() => {
     if (!conversationId) return;
@@ -72,7 +76,12 @@ export function ConversationThread() {
 
       <div className="flex-1 space-y-3 overflow-y-auto bg-zinc-50 p-5 dark:bg-zinc-950">
         {messages.map((msg: Message) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            channel={conversation.channel}
+            showStatusLabel={msg.id === lastAgentMessageId}
+          />
         ))}
         <div ref={bottomRef} />
       </div>

@@ -15,6 +15,12 @@ class TelegramAPIError(ChannelAPIError):
     """Raised when the Telegram Bot API returns ok: false."""
 
 
+def scoped_message_id(chat_id: str | int, message_id: int | None) -> str | None:
+    # Telegram numbers messages per chat (every chat starts at 1), but
+    # messages.channel_message_id is globally unique, so prefix the chat.
+    return f"{chat_id}:{message_id}" if message_id is not None else None
+
+
 def _method_for(media: OutboundMedia) -> tuple[str, str]:
     """Pick the Bot API method + form field; anything Telegram would reject goes as a document."""
     ctype = (media.content_type or "").lower()
@@ -64,7 +70,7 @@ class TelegramClient:
 
     async def send_text(self, receiver: str, text: str) -> ChannelSendResult:
         data = await self._post("sendMessage", {"chat_id": receiver, "text": text})
-        return self._result(data)
+        return self._result(data, receiver)
 
     async def send_media(self, receiver: str, media: OutboundMedia) -> ChannelSendResult:
         # Upload the bytes directly so sending works even when PUBLIC_BASE_URL
@@ -75,7 +81,7 @@ class TelegramClient:
             files = {field: (media.file_name, fh, media.content_type or "application/octet-stream")}
             async with httpx.AsyncClient(timeout=120.0) as client:
                 data = self._check(await client.post(url, data={"chat_id": receiver}, files=files))
-        return self._result(data)
+        return self._result(data, receiver)
 
     async def get_account_info(self) -> dict:
         return await self._post("getMe", {})
@@ -95,9 +101,9 @@ class TelegramClient:
         return response.content, PurePosixPath(file_path).name
 
     @staticmethod
-    def _result(data: dict) -> ChannelSendResult:
+    def _result(data: dict, chat_id: str) -> ChannelSendResult:
         message_id = data.get("result", {}).get("message_id")
-        return ChannelSendResult(message_id=str(message_id) if message_id is not None else None, raw=data)
+        return ChannelSendResult(message_id=scoped_message_id(chat_id, message_id), raw=data)
 
     @staticmethod
     def verify_secret(configured_secret: str, header_value: str) -> bool:

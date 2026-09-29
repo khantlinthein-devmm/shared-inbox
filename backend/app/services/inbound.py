@@ -8,7 +8,7 @@ broadcast logic is written once and shared across Viber, Telegram, etc.
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.database import SessionLocal
 from app.models import Conversation, ConversationStatus, Message, MessageSender, MessageStatus
@@ -62,8 +62,27 @@ async def handle_inbound_message(
             )
             db.add(conversation)
             await db.flush()
+            seen_ids: list[int] = []
         else:
             conversation.updated_at = now
+            # A reply means the contact has seen what the agents sent before it.
+            # This is the only read signal on Telegram (bots get no read receipts)
+            # and fills gaps on Viber, whose seen callbacks can be missed.
+            seen_ids = list(
+                (
+                    await db.scalars(
+                        update(Message)
+                        .where(
+                            Message.conversation_id == conversation.id,
+                            Message.sender == MessageSender.agent.value,
+                            Message.status.in_((MessageStatus.sent.value, MessageStatus.delivered.value)),
+                            Message.created_at <= now,
+                        )
+                        .values(status=MessageStatus.seen.value)
+                        .returning(Message.id)
+                    )
+                ).all()
+            )
 
         inbound = Message(
             conversation_id=conversation.id,
@@ -121,25 +140,30 @@ async def handle_inbound_message(
         "conversation": conversation_data,
     }
     await manager.broadcast_to_agents({"type": "message:new", "payload": inbound_dict})
+    for message_id in seen_ids:
+        await _broadcast_status(message_id, conversation_id, MessageStatus.seen.value)
+
+
+_STATUS_RANK = {MessageStatus.sent.value: 0, MessageStatus.delivered.value: 1, MessageStatus.seen.value: 2}
 
 
 async def handle_delivery_update(*, channel_message_id: str, seen: bool) -> None:
-    """Update a previously-sent message's status (delivered/seen) and broadcast it."""
+    """Advance a previously-sent message's status (delivered/seen) and broadcast it."""
     status_value = MessageStatus.seen.value if seen else MessageStatus.delivered.value
     async with SessionLocal() as db:
         message = await db.scalar(select(Message).where(Message.channel_message_id == channel_message_id))
-        if message is None or message.status == status_value:
+        # Callbacks can arrive out of order; a late "delivered" must not undo "seen".
+        if message is None or _STATUS_RANK.get(message.status, -1) >= _STATUS_RANK[status_value]:
             return
         message.status = status_value
         await db.commit()
+        await _broadcast_status(message.id, message.conversation_id, status_value)
 
-        await manager.broadcast_to_agents(
-            {
-                "type": "message:status",
-                "payload": {
-                    "message_id": message.id,
-                    "conversation_id": message.conversation_id,
-                    "status": status_value,
-                },
-            }
-        )
+
+async def _broadcast_status(message_id: int, conversation_id: int, status: str) -> None:
+    await manager.broadcast_to_agents(
+        {
+            "type": "message:status",
+            "payload": {"message_id": message_id, "conversation_id": conversation_id, "status": status},
+        }
+    )

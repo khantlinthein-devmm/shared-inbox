@@ -5,12 +5,25 @@ import { formatTime } from "@/lib/format";
 import { useMounted } from "@/hooks/useMounted";
 import type { Message } from "@/lib/types";
 
-const STATUS_ICONS: Record<string, React.ReactNode> = {
-  sent: <Check className="h-3 w-3" />,
-  delivered: <CheckCheck className="h-3 w-3" />,
-  seen: <CheckCheck className="h-3 w-3 text-white/80" />,
-  received: null,
-};
+const STATUS_LABELS: Record<string, string> = { sent: "Sent", delivered: "Delivered", seen: "Seen" };
+
+function StatusMark({ status, channel, showLabel }: { status: string; channel: string; showLabel: boolean }) {
+  const label = STATUS_LABELS[status];
+  if (!label) return null;
+  const seen = status === "seen";
+  const Icon = status === "sent" ? Check : CheckCheck;
+  // Telegram never reports delivery or reads to bots; "Seen" is inferred from a reply.
+  const title =
+    status === "sent" && channel === "telegram"
+      ? "Sent. Telegram doesn't report reads to bots — this turns Seen when the customer replies."
+      : label;
+  return (
+    <span title={title} className={`flex items-center gap-0.5 ${seen ? "font-semibold text-sky-200" : ""}`}>
+      <Icon className={seen ? "h-3.5 w-3.5 text-sky-300" : "h-3.5 w-3.5"} aria-label={label} />
+      {showLabel && <span>{label}</span>}
+    </span>
+  );
+}
 
 const IMAGE_TYPES = new Set(["image", "picture", "photo"]);
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp)$/i;
@@ -92,7 +105,15 @@ function Attachment({ message }: { message: Message }) {
   );
 }
 
-export function MessageBubble({ message }: { message: Message }) {
+export function MessageBubble({
+  message,
+  channel,
+  showStatusLabel = false,
+}: {
+  message: Message;
+  channel: string;
+  showStatusLabel?: boolean;
+}) {
   const isOwn = message.sender === "agent";
   // formatTime depends on the browser timezone, which differs from the
   // server render. Render a stable placeholder until mounted to avoid
@@ -121,7 +142,7 @@ export function MessageBubble({ message }: { message: Message }) {
           }`}
         >
           {mounted ? formatTime(message.created_at) : ""}
-          {isOwn && STATUS_ICONS[message.status]}
+          {isOwn && <StatusMark status={message.status} channel={channel} showLabel={showStatusLabel} />}
         </div>
       </div>
     </div>

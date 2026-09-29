@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from app.core.config import get_settings
 from app.schemas.telegram import TelegramMessage, TelegramUpdate
 from app.services.channels.base import ChannelAPIError
-from app.services.channels.telegram import client as telegram_client
+from app.services.channels.telegram import client as telegram_client, scoped_message_id
 from app.services.inbound import handle_inbound_message
 from app.services.media import save_bytes
 
@@ -107,7 +107,7 @@ async def _handle_message(message: TelegramMessage, received_at: datetime) -> No
         message_type=message_type,
         text=text,
         media_url=media_url,
-        channel_message_id=str(message.message_id),
+        channel_message_id=scoped_message_id(message.chat.id, message.message_id),
         payload=message.model_dump(mode="json", exclude_none=True, by_alias=True),
         auto_reply=settings.telegram_auto_reply or None,
         received_at=received_at,
